@@ -3,10 +3,6 @@
   hosts: ec2
   become: yes
 
-  vars:
-    nifi_install_dir: /opt/nifi-1.26.0
-    java_home_path: "/usr/lib/jvm/java-17-openjdk-amd64"  # Default path, overridden below
-
   tasks:
     - name: Ensure unzip is installed
       apt:
@@ -23,7 +19,7 @@
 
     - name: Set ownership on NiFi directory
       file:
-        path: "{{ nifi_install_dir }}"
+        path: /opt/nifi-1.26.0
         state: directory
         owner: ubuntu
         group: ubuntu
@@ -35,44 +31,40 @@
       register: java_home_path_cmd
       changed_when: false
 
-    - name: Set java_home_path variable from command output
-      set_fact:
-        java_home_path: "{{ java_home_path_cmd.stdout }}"
-
     - name: Configure JAVA_HOME in NiFi bootstrap.conf
       lineinfile:
-        path: "{{ nifi_install_dir }}/conf/bootstrap.conf"
+        path: /opt/nifi-1.26.0/conf/bootstrap.conf
         regexp: '^java.home='
-        line: "java.home={{ java_home_path }}"
+        line: "java.home={{ java_home_path_cmd.stdout }}"
         create: yes
 
     - name: Update nifi.web.http.host to listen on all interfaces
       replace:
-        path: "{{ nifi_install_dir }}/conf/nifi.properties"
+        path: /opt/nifi-1.26.0/conf/nifi.properties
         regexp: '^nifi.web.http.host=.*'
         replace: 'nifi.web.http.host='
 
     - name: Comment out nifi.web.https.host
       replace:
-        path: "{{ nifi_install_dir }}/conf/nifi.properties"
+        path: /opt/nifi-1.26.0/conf/nifi.properties
         regexp: '^(nifi.web.https.host=.*)'
         replace: '# \1'
 
     - name: Comment out nifi.web.https.port
       replace:
-        path: "{{ nifi_install_dir }}/conf/nifi.properties"
+        path: /opt/nifi-1.26.0/conf/nifi.properties
         regexp: '^(nifi.web.https.port=.*)'
         replace: '# \1'
 
     - name: Set nifi.remote.input.secure to false
       replace:
-        path: "{{ nifi_install_dir }}/conf/nifi.properties"
+        path: /opt/nifi-1.26.0/conf/nifi.properties
         regexp: '^nifi.remote.input.secure=.*'
         replace: 'nifi.remote.input.secure=false'
 
     - name: Clear specified NiFi security properties
       lineinfile:
-        path: "{{ nifi_install_dir }}/conf/nifi.properties"
+        path: /opt/nifi-1.26.0/conf/nifi.properties
         regexp: '^nifi.security.{{ item }}=.*'
         line: "nifi.security.{{ item }}="
         backrefs: yes
@@ -86,12 +78,12 @@
         - truststorePasswd
 
     - name: Start NiFi
-      command: "{{ nifi_install_dir }}/bin/nifi.sh start"
+      command: /opt/nifi-1.26.0/bin/nifi.sh start
       environment:
-        JAVA_HOME: "{{ java_home_path }}"
+        JAVA_HOME: "{{ java_home_path_cmd.stdout }}"
 
     - name: Check NiFi status
-      command: "{{ nifi_install_dir }}/bin/nifi.sh status"
+      command: /opt/nifi-1.26.0/bin/nifi.sh status
       register: nifi_status
 
     - name: Print NiFi status

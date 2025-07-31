@@ -45,19 +45,19 @@ pipeline {
                         returnStdout: true
                     ).trim()
                     sh '''
-                    for i in {1..30}; do
+                        for i in {1..30}; do
                         nc -zv ${EC2_PUBLIC_IP} 22 && break
                         echo "Waiting for SSH on ${EC2_PUBLIC_IP}..."
                         sleep 10
-                    done
+                        done
                     '''
                 }
             }
         }
 
-        stage('Install Java') {
+        stage('Install Java and Setup JAVA_HOME') {
             steps {
-                sshagent (credentials: ['nifi-ssh-key']) {
+                sshagent(credentials: ['nifi-ssh-key']) {
                     sh 'ansible-playbook -i inventory.ini ansible/playbooks/install-java.yml'
                 }
             }
@@ -71,21 +71,17 @@ pipeline {
 
         stage('Copy NiFi Zip to EC2') {
             steps {
-                script {
-                    env.EC2_PUBLIC_IP = sh(
-                        script: 'terraform -chdir=terraform output -raw nifi_public_ip',
-                        returnStdout: true
-                    ).trim()
-                }
-                sshagent (credentials: ['nifi-ssh-key']) {
-                    sh 'scp -o StrictHostKeyChecking=no ${NIFI_ZIP_NAME} ubuntu@${EC2_PUBLIC_IP}:${REMOTE_NIFI_ZIP}'
+                sshagent(credentials: ['nifi-ssh-key']) {
+                    sh '''
+                        scp -o StrictHostKeyChecking=no ${NIFI_ZIP_NAME} ubuntu@${EC2_PUBLIC_IP}:${REMOTE_NIFI_ZIP}
+                    '''
                 }
             }
         }
 
-        stage('Deploy & Start NiFi') {
+        stage('Deploy & Start NiFi with JAVA_HOME configured') {
             steps {
-                sshagent (credentials: ['nifi-ssh-key']) {
+                sshagent(credentials: ['nifi-ssh-key']) {
                     sh 'ansible-playbook -i inventory.ini ansible/playbooks/deploy-nifi.yml'
                 }
             }
