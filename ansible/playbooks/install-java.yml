@@ -2,9 +2,31 @@
 - name: Install Java 17
   hosts: ec2
   become: yes
+
   tasks:
     - name: Update APT cache
-      apt: { update_cache: yes }
+      apt:
+        update_cache: yes
+
     - name: Install OpenJDK 17
-      apt: { name: openjdk-17-jdk, state: present }
-                                                      
+      apt:
+        name: openjdk-17-jdk
+        state: present
+
+    - name: Find JAVA_HOME path
+      shell: |
+        readlink -f $(which java) | sed "s:bin/java::"
+      register: java_home_path
+      changed_when: false
+
+    - name: Set JAVA_HOME environment variable for all sessions (profile)
+      lineinfile:
+        path: /etc/profile.d/java.sh
+        line: "export JAVA_HOME={{ java_home_path.stdout }}"
+        create: yes
+        mode: '0755'
+
+    - name: Export JAVA_HOME for current playbook run (in memory)
+      set_fact:
+        ansible_env:
+          JAVA_HOME: "{{ java_home_path.stdout }}"

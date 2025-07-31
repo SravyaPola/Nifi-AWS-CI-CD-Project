@@ -1,59 +1,99 @@
 ---
-- name: Deploy and configure NiFi
+- name: Deploy and start NiFi
   hosts: ec2
   become: yes
+
+  vars:
+    nifi_install_dir: /opt/nifi-1.26.0
+    java_home_path: "/usr/lib/jvm/java-17-openjdk-amd64"  # Default path, overridden below
+
   tasks:
     - name: Ensure unzip is installed
       apt:
         name: unzip
         state: present
-        update_cache: yes
 
     - name: Unarchive NiFi to /opt
       unarchive:
         src: /home/ubuntu/nifi-1.26.0-bin.zip
         dest: /opt
         remote_src: yes
-        extra_opts: [--strip-components=1]
+        owner: ubuntu
+        group: ubuntu
 
     - name: Set ownership on NiFi directory
       file:
-        path: /opt
+        path: "{{ nifi_install_dir }}"
+        state: directory
         owner: ubuntu
         group: ubuntu
         recurse: yes
 
-    - name: Set JAVA_HOME in bootstrap.conf
+    - name: Find JAVA_HOME path on target host
+      shell: |
+        readlink -f $(which java) | sed "s:bin/java::"
+      register: java_home_path_cmd
+      changed_when: false
+
+    - name: Set java_home_path variable from command output
+      set_fact:
+        java_home_path: "{{ java_home_path_cmd.stdout }}"
+
+    - name: Configure JAVA_HOME in NiFi bootstrap.conf
       lineinfile:
-        path: /opt/nifi-1.26.0/conf/bootstrap.conf
-        regexp: '^JAVA_HOME='
-        line: 'JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64'
+        path: "{{ nifi_install_dir }}/conf/bootstrap.conf"
+        regexp: '^java.home='
+        line: "java.home={{ java_home_path }}"
         create: yes
 
-    - name: Set nifi.web.http.port=8080 in nifi.properties
-      lineinfile:
-        path: /opt/nifi-1.26.0/conf/nifi.properties
-        regexp: '^nifi.web.http.port='
-        line: 'nifi.web.http.port=8080'
-        create: yes
-
-    - name: Comment out nifi.web.https.port in nifi.properties
+    - name: Update nifi.web.http.host to listen on all interfaces
       replace:
-        path: /opt/nifi-1.26.0/conf/nifi.properties
-        regexp: '^(nifi.web.https.port=.*)'
-        replace: '# \1'
+        path: "{{ nifi_install_dir }}/conf/nifi.properties"
+        regexp: '^nifi.web.http.host=.*'
+        replace: 'nifi.web.http.host='
 
-    - name: Comment out nifi.web.https.host in nifi.properties
+    - name: Comment out nifi.web.https.host
       replace:
-        path: /opt/nifi-1.26.0/conf/nifi.properties
+        path: "{{ nifi_install_dir }}/conf/nifi.properties"
         regexp: '^(nifi.web.https.host=.*)'
         replace: '# \1'
 
-    - name: Start NiFi
-      command: /opt/nifi-1.26.0/bin/nifi.sh start
+    - name: Comment out nifi.web.https.port
+      replace:
+        path: "{{ nifi_install_dir }}/conf/nifi.properties"
+        regexp: '^(nifi.web.https.port=.*)'
+        replace: '# \1'
 
-    - name: Wait for NiFi to start
-      wait_for:
-        port: 8080
-        delay: 10
-        timeout: 60
+    - name: Set nifi.remote.input.secure to false
+      replace:
+        path: "{{ nifi_install_dir }}/conf/nifi.properties"
+        regexp: '^nifi.remote.input.secure=.*'
+        replace: 'nifi.remote.input.secure=false'
+
+    - name: Clear specified NiFi security properties
+      lineinfile:
+        path: "{{ nifi_install_dir }}/conf/nifi.properties"
+        regexp: '^nifi.security.{{ item }}=.*'
+        line: "nifi.security.{{ item }}="
+        backrefs: yes
+      loop:
+        - keystore
+        - truststore
+        - keystoreType
+        - keystorePasswd
+        - keyPasswd
+        - truststoreType
+        - truststorePasswd
+
+    - name: Start NiFi
+      command: "{{ nifi_install_dir }}/bin/nifi.sh start"
+      environment:
+        JAVA_HOME: "{{ java_home_path }}"
+
+    - name: Check NiFi status
+      command: "{{ nifi_install_dir }}/bin/nifi.sh status"
+      register: nifi_status
+
+    - name: Print NiFi status
+      debug:
+        var: nifi_status.stdout
