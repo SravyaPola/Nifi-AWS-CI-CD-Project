@@ -36,6 +36,7 @@ pipeline {
         stage('Generate Ansible Inventory') {
             steps { sh 'bash scripts/gen-inventory.sh' }
         }
+
         stage('Wait for SSH') {
             steps {
                 script {
@@ -44,16 +45,15 @@ pipeline {
                         returnStdout: true
                     ).trim()
                     sh '''
-                        for i in {1..30}; do
+                    for i in {1..30}; do
                         nc -zv ${EC2_PUBLIC_IP} 22 && break
                         echo "Waiting for SSH on ${EC2_PUBLIC_IP}..."
                         sleep 10
-                        done
+                    done
                     '''
                 }
             }
         }
-
 
         stage('Install Java') {
             steps {
@@ -78,9 +78,7 @@ pipeline {
                     ).trim()
                 }
                 sshagent (credentials: ['nifi-ssh-key']) {
-                    sh '''
-                        scp -o StrictHostKeyChecking=no ${NIFI_ZIP_NAME} ubuntu@${EC2_PUBLIC_IP}:${REMOTE_NIFI_ZIP}
-                    '''
+                    sh 'scp -o StrictHostKeyChecking=no ${NIFI_ZIP_NAME} ubuntu@${EC2_PUBLIC_IP}:${REMOTE_NIFI_ZIP}'
                 }
             }
         }
