@@ -1,24 +1,16 @@
 pipeline {
     agent any
 
-    tools {
-        jdk  'java'
-        maven 'mvn'
-    }
-
     environment {
-        AWS_ACCESS_KEY_ID     = credentials('aws-creds').accessKey
-        AWS_SECRET_ACCESS_KEY = credentials('aws-creds').secretKey
-
+        AWS_ACCESS_KEY_ID     = credentials('aws-creds')
+        AWS_SECRET_ACCESS_KEY = credentials('aws-creds')
         NIFI_ARTIFACT_URL = 'https://archive.apache.org/dist/nifi/1.26.0/nifi-1.26.0-bin.zip'
         NIFI_ZIP_NAME     = 'nifi-1.26.0-bin.zip'
         REMOTE_NIFI_ZIP   = '/home/ubuntu/nifi-1.26.0-bin.zip'
     }
 
     stages {
-        stage('Clean Workspace') {
-            steps { cleanWs() }
-        }
+        stage('Clean Workspace') { steps { cleanWs() } }
 
         stage('Checkout Code') {
             steps {
