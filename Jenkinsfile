@@ -36,6 +36,24 @@ pipeline {
         stage('Generate Ansible Inventory') {
             steps { sh 'bash scripts/gen-inventory.sh' }
         }
+        stage('Wait for SSH') {
+            steps {
+                script {
+                    env.EC2_PUBLIC_IP = sh(
+                        script: 'terraform -chdir=terraform output -raw nifi_public_ip',
+                        returnStdout: true
+                    ).trim()
+                    sh '''
+                        for i in {1..30}; do
+                        nc -zv ${EC2_PUBLIC_IP} 22 && break
+                        echo "Waiting for SSH on ${EC2_PUBLIC_IP}..."
+                        sleep 10
+                        done
+                    '''
+                }
+            }
+        }
+
 
         stage('Install Java') {
             steps {
