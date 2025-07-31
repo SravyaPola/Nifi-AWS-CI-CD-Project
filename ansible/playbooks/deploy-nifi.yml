@@ -1,0 +1,91 @@
+---
+- name: Unzip, configure, and start NiFi
+  hosts: ec2
+  become: yes
+  vars:
+    nifi_zip_path: "/home/ubuntu/nifi-1.26.0-bin.zip"
+    nifi_install_dir: "/opt/nifi-1.26.0"
+    nifi_properties_file: "{{ nifi_install_dir }}/conf/nifi.properties"
+    nifi_bin: "{{ nifi_install_dir }}/bin/nifi.sh"
+
+  tasks:
+    - name: Ensure unzip is installed
+      apt:
+        name: unzip
+        state: present
+        update_cache: yes
+
+    - name: Unarchive NiFi to /opt
+      unarchive:
+        src: "{{ nifi_zip_path }}"
+        dest: /opt/
+        remote_src: yes
+        creates: "{{ nifi_install_dir }}/bin/nifi.sh"
+
+    - name: Set ownership on NiFi directory
+      file:
+        path: "{{ nifi_install_dir }}"
+        owner: ubuntu
+        group: ubuntu
+        recurse: yes
+
+    - name: Update nifi.web.http.host to listen on all interfaces
+      lineinfile:
+        path: "{{ nifi_properties_file }}"
+        regexp: '^nifi.web.http.host='
+        line: 'nifi.web.http.host=0.0.0.0'
+
+    - name: Comment out nifi.web.https.host
+      lineinfile:
+        path: "{{ nifi_properties_file }}"
+        regexp: '^nifi.web.https.host='
+        line: '#nifi.web.https.host=127.0.0.1'
+        backrefs: yes
+
+    - name: Comment out nifi.web.https.port
+      lineinfile:
+        path: "{{ nifi_properties_file }}"
+        regexp: '^nifi.web.https.port='
+        line: '#nifi.web.https.port=8443'
+        backrefs: yes
+
+    - name: Set nifi.remote.input.secure to false
+      lineinfile:
+        path: "{{ nifi_properties_file }}"
+        regexp: '^nifi.remote.input.secure='
+        line: 'nifi.remote.input.secure=false'
+        backrefs: yes
+
+    - name: Clear specified NiFi security properties
+      loop:
+        - nifi.security.keystore
+        - nifi.security.truststore
+        - nifi.security.keystoreType
+        - nifi.security.keystorePasswd
+        - nifi.security.keyPasswd
+        - nifi.security.truststoreType
+        - nifi.security.truststorePasswd
+      ansible.builtin.lineinfile:
+        path: "{{ nifi_properties_file }}"
+        regexp: '^{{ item | regex_escape() }}='
+        line: '{{ item }}='
+        create: yes
+        backrefs: yes
+
+    - name: Start NiFi
+      become: true
+      become_user: ubuntu
+      shell: "{{ nifi_bin }} start"
+      args:
+        chdir: "{{ nifi_install_dir }}/bin"
+
+    - name: Check NiFi status
+      become: true
+      become_user: ubuntu
+      shell: "{{ nifi_bin }} status"
+      register: nifi_status
+      changed_when: false
+
+    - name: Print NiFi status
+      debug:
+        var: nifi_status.stdout_lines
