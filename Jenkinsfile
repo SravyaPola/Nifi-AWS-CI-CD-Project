@@ -2,16 +2,15 @@ pipeline {
     agent any
 
     environment {
-        // Set AWS credentials for Terraform/Ansible steps
-        AWS_ACCESS_KEY_ID     = credentials('aws-creds')
-        AWS_SECRET_ACCESS_KEY = credentials('aws-creds')
         NIFI_ARTIFACT_URL = 'https://archive.apache.org/dist/nifi/1.26.0/nifi-1.26.0-bin.zip'
         NIFI_ZIP_NAME     = 'nifi-1.26.0-bin.zip'
         REMOTE_NIFI_ZIP   = '/home/ubuntu/nifi-1.26.0-bin.zip'
     }
 
     stages {
-        stage('Clean Workspace') { steps { cleanWs() } }
+        stage('Clean Workspace') {
+            steps { cleanWs() }
+        }
 
         stage('Checkout Code') {
             steps {
@@ -21,9 +20,15 @@ pipeline {
 
         stage('Terraform Init & Apply') {
             steps {
-                dir('terraform') {
-                    sh 'terraform init'
-                    sh 'terraform apply -auto-approve'
+                withCredentials([usernamePassword(
+                    credentialsId: 'aws-creds',
+                    usernameVariable: 'AWS_ACCESS_KEY_ID',
+                    passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                )]) {
+                    dir('terraform') {
+                        sh 'terraform init'
+                        sh 'terraform apply -auto-approve'
+                    }
                 }
             }
         }
