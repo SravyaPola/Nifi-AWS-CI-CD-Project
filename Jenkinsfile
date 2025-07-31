@@ -2,6 +2,7 @@ pipeline {
     agent any
 
     environment {
+        // Set AWS credentials for Terraform/Ansible steps
         AWS_ACCESS_KEY_ID     = credentials('aws-creds')
         AWS_SECRET_ACCESS_KEY = credentials('aws-creds')
         NIFI_ARTIFACT_URL = 'https://archive.apache.org/dist/nifi/1.26.0/nifi-1.26.0-bin.zip'
