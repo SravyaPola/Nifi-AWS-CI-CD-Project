@@ -6,13 +6,11 @@
     nifi_home: /opt/nifi-1.26.0
     nifi_user: ubuntu
     nifi_group: ubuntu
-
   tasks:
     - name: Ensure unzip is installed
       apt:
         name: unzip
         state: present
-
     - name: Unarchive NiFi to {{ nifi_home }}
       unarchive:
         src: /home/ubuntu/nifi-1.26.0-bin.zip
@@ -20,7 +18,6 @@
         remote_src: yes
         owner: "{{ nifi_user }}"
         group: "{{ nifi_group }}"
-
     - name: Set ownership on NiFi directory
       file:
         path: "{{ nifi_home }}"
@@ -28,63 +25,54 @@
         owner: "{{ nifi_user }}"
         group: "{{ nifi_group }}"
         recurse: yes
-
     - name: Ensure NiFi scripts are executable
       file:
         path: "{{ nifi_home }}/bin/nifi.sh"
-        mode: '0755'
-
+        mode: "0755"
     - name: Ensure NiFi logs directory exists
       file:
         path: "{{ nifi_home }}/logs"
         state: directory
         owner: "{{ nifi_user }}"
         group: "{{ nifi_group }}"
-        mode: '0755'
-
+        mode: "0755"
     - name: Find JAVA_HOME path on target host
       shell: |
         readlink -f $(which java) | sed "s:bin/java::"
       register: java_home_path_cmd
       changed_when: false
-
     - name: Configure java.home in bootstrap.conf
       lineinfile:
         path: "{{ nifi_home }}/conf/bootstrap.conf"
-        regexp: '^java\.home='
-        line: "java.home={{ java_home_path_cmd.stdout }}"
+        regexp: ^java\.home=
+        line: java.home={{ java_home_path_cmd.stdout }}
         create: yes
-
-
-    - name: Listen on every interface for the NiFi UI
-      replace:
+    - name: Ensure NiFi HTTP binds to all interfaces
+      lineinfile:
         path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: '^nifi.web.http.host=.*'
-        replace: 'nifi.web.http.host=0.0.0.0'
-
+        regexp: ^#?nifi\.web\.http\.host=
+        line: nifi.web.http.host=0.0.0.0
+        create: yes
     - name: Comment out nifi.web.https.host
       replace:
         path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: '^(nifi.web.https.host=.*)'
-        replace: '# \1'
-
+        regexp: ^(nifi.web.https.host=.*)
+        replace: "# \\1"
     - name: Comment out nifi.web.https.port
       replace:
         path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: '^(nifi.web.https.port=.*)'
-        replace: '# \1'
-
+        regexp: ^(nifi.web.https.port=.*)
+        replace: "# \\1"
     - name: Set nifi.remote.input.secure to false
       replace:
         path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: '^nifi.remote.input.secure=.*'
-        replace: 'nifi.remote.input.secure=false'
-
+        regexp: ^nifi.remote.input.secure=.*
+        replace: nifi.remote.input.secure=false
     - name: Clear specified NiFi security properties
       lineinfile:
         path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: '^nifi.security.{{ item }}=.*'
-        line: "nifi.security.{{ item }}="
+        regexp: ^nifi.security.{{ item }}=.*
+        line: nifi.security.{{ item }}=
         backrefs: yes
       loop:
         - keystore
@@ -94,26 +82,20 @@
         - keyPasswd
         - truststoreType
         - truststorePasswd
-
     - name: Start NiFi
       become: yes
       become_user: "{{ nifi_user }}"
       command: "{{ nifi_home }}/bin/nifi.sh start"
       environment:
         JAVA_HOME: "{{ java_home_path_cmd.stdout }}"
-
-
-    - name: Wait for NiFi HTTP port
+    - name: Wait for NiFi to start listening on 8080
       wait_for:
-        host: "{{ ansible_host }}"
         port: 8080
-        delay: 5
-        timeout: 120
-
+        delay: 10
+        timeout: 300
     - name: Check NiFi status
       command: "{{ nifi_home }}/bin/nifi.sh status"
       register: nifi_status
-
     - name: Print NiFi status
       debug:
         var: nifi_status.stdout
