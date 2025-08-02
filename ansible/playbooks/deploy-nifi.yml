@@ -111,6 +111,7 @@
         JAVA_HOME: "{{ java_home_path_cmd.stdout }}"
     - name: Wait for NiFi to start listening on 8080
       wait_for:
+        host: "{{ ansible_default_ipv4.address }}"
         port: 8080
         delay: 5
         timeout: 300
