@@ -3,15 +3,11 @@ pipeline {
 
     environment {
         NIFI_ARTIFACT_URL = 'https://archive.apache.org/dist/nifi/1.26.0/nifi-1.26.0-bin.zip'
-        NIFI_ZIP_NAME     = 'nifi-1.26.0-bin.zip'
-        REMOTE_NIFI_ZIP   = '/home/ubuntu/nifi-1.26.0-bin.zip'
     }
 
     stages {
         stage('Clean Workspace') {
-            steps {
-                cleanWs()
-            }
+            steps { cleanWs() }
         }
 
         stage('Checkout Code') {
