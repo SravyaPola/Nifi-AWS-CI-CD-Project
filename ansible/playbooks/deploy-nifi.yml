@@ -1,19 +1,29 @@
 ---
-- name: Deploy and start NiFi
+- name: Full NiFi Deployment
   hosts: ec2
+  remote_user: ubuntu
   become: yes
   vars:
     nifi_home: /opt/nifi-1.26.0
     nifi_user: ubuntu
     nifi_group: ubuntu
+    nifi_artifact_url: https://archive.apache.org/dist/nifi/1.26.0/nifi-1.26.0-bin.zip
+    nifi_zip: nifi-1.26.0-bin.zip
+    remote_zip_path: /home/ubuntu/nifi-1.26.0-bin.zip
   tasks:
     - name: Ensure unzip is installed
       apt:
         name: unzip
         state: present
+        update_cache: yes
+    - name: Download NiFi artifact
+      get_url:
+        url: "{{ nifi_artifact_url }}"
+        dest: "{{ remote_zip_path }}"
+        mode: "0644"
     - name: Unarchive NiFi to {{ nifi_home }}
       unarchive:
-        src: /home/ubuntu/nifi-1.26.0-bin.zip
+        src: "{{ remote_zip_path }}"
         dest: /opt
         remote_src: yes
         owner: "{{ nifi_user }}"
@@ -35,22 +45,27 @@
         owner: "{{ nifi_user }}"
         group: "{{ nifi_group }}"
         mode: "0755"
-    - name: Find JAVA_HOME path on target host
+    - name: Install OpenJDK 17
+      apt:
+        name: openjdk-17-jdk
+        state: present
+        update_cache: yes
+    - name: Find JAVA_HOME
       shell: readlink -f $(which java) | sed "s:bin/java::"
-      register: java_home_path_cmd
+      register: java_home_path
       changed_when: false
     - name: Configure java.home in bootstrap.conf
       lineinfile:
         path: "{{ nifi_home }}/conf/bootstrap.conf"
         regexp: ^java\.home=
-        line: java.home={{ java_home_path_cmd.stdout }}
+        line: java.home={{ java_home_path.stdout }}
         create: yes
     - name: Ensure NiFi HTTP host is 0.0.0.0
       lineinfile:
         path: "{{ nifi_home }}/conf/nifi.properties"
         regexp: ^#?nifi\.web\.http\.host=
         line: nifi.web.http.host=0.0.0.0
-        create: yes
+      notify: Restart NiFi
     - name: Ensure NiFi HTTP port is 8080
       lineinfile:
         path: "{{ nifi_home }}/conf/nifi.properties"
@@ -106,18 +121,23 @@
         create: yes
     - name: Start NiFi
       become_user: "{{ nifi_user }}"
-      command: "{{ nifi_home }}/bin/nifi.sh start"
+      shell: "{{ nifi_home }}/bin/nifi.sh start"
       environment:
-        JAVA_HOME: "{{ java_home_path_cmd.stdout }}"
-    - name: Wait for NiFi to start listening on 8080
+        JAVA_HOME: "{{ java_home_path.stdout }}"
+    - name: Wait for NiFi to start on port 8080 (local)
       wait_for:
-        host: "{{ ansible_default_ipv4.address }}"
+        host: 127.0.0.1
         port: 8080
-        delay: 5
+        delay: 10
         timeout: 300
+      delegate_to: "{{ inventory_hostname }}"
     - name: Check NiFi status
-      command: "{{ nifi_home }}/bin/nifi.sh status"
+      shell: "{{ nifi_home }}/bin/nifi.sh status"
       register: nifi_status
     - name: Print NiFi status
       debug:
         var: nifi_status.stdout
+  handlers:
+    - name: Restart NiFi
+      become_user: "{{ nifi_user }}"
+      shell: "{{ nifi_home }}/bin/nifi.sh restart"
