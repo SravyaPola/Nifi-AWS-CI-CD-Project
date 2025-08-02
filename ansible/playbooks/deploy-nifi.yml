@@ -47,43 +47,66 @@
         regexp: ^java\.home=
         line: java.home={{ java_home_path_cmd.stdout }}
         create: yes
-    - name: Ensure NiFi HTTP binds to all interfaces
+    - name: Ensure NiFi HTTP host is 0.0.0.0
       lineinfile:
         path: "{{ nifi_home }}/conf/nifi.properties"
         regexp: ^#?nifi\.web\.http\.host=
         line: nifi.web.http.host=0.0.0.0
         create: yes
-    - name: Comment out nifi.web.https.host
-      replace:
-        path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: ^(nifi.web.https.host=.*)
-        replace: "# \\1"
-    - name: Comment out nifi.web.https.port
-      replace:
-        path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: ^(nifi.web.https.port=.*)
-        replace: "# \\1"
-    - name: Set nifi.remote.input.secure to false
-      replace:
-        path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: ^nifi.remote.input.secure=.*
-        replace: nifi.remote.input.secure=false
-    - name: Clear specified NiFi security properties
+    - name: Ensure NiFi HTTP port is 8080
       lineinfile:
         path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: ^nifi.security.{{ item }}=.*
-        line: nifi.security.{{ item }}=
-        backrefs: yes
-      loop:
-        - keystore
-        - truststore
-        - keystoreType
-        - keystorePasswd
-        - keyPasswd
-        - truststoreType
-        - truststorePasswd
+        regexp: ^#?nifi\.web\.http\.port=
+        line: nifi.web.http.port=8080
+        create: yes
+    - name: Ensure HTTP network interface default is blank
+      lineinfile:
+        path: "{{ nifi_home }}/conf/nifi.properties"
+        regexp: ^#?nifi\.web\.http\.network\.interface\.default=
+        line: nifi.web.http.network.interface.default=
+        create: yes
+    - name: Comment out HTTPS and security properties
+      replace:
+        path: "{{ nifi_home }}/conf/nifi.properties"
+        regexp: ^(nifi\.web\.https\.(host|port)|nifi\.security\.(keystore|keystoreType|keystorePasswd|keyPasswd|truststore|truststoreType|truststorePasswd))=.*
+        replace: "# \\\\0"
+    - name: Clear remote input host
+      lineinfile:
+        path: "{{ nifi_home }}/conf/nifi.properties"
+        regexp: ^#?nifi\.remote\.input\.host=
+        line: nifi.remote.input.host=
+        create: yes
+    - name: Disable secure Site-to-Site
+      lineinfile:
+        path: "{{ nifi_home }}/conf/nifi.properties"
+        regexp: ^#?nifi\.remote\.input\.secure=
+        line: nifi.remote.input.secure=false
+        create: yes
+    - name: Clear remote input socket port
+      lineinfile:
+        path: "{{ nifi_home }}/conf/nifi.properties"
+        regexp: ^#?nifi\.remote\.input\.socket\.port=
+        line: nifi.remote.input.socket.port=
+        create: yes
+    - name: Enable Site-to-Site over HTTP
+      lineinfile:
+        path: "{{ nifi_home }}/conf/nifi.properties"
+        regexp: ^#?nifi\.remote\.input\.http\.enabled=
+        line: nifi.remote.input.http.enabled=true
+        create: yes
+    - name: Set Site-to-Site HTTP transaction TTL
+      lineinfile:
+        path: "{{ nifi_home }}/conf/nifi.properties"
+        regexp: ^#?nifi\.remote\.input\.http\.transaction\.ttl=
+        line: nifi.remote.input.http.transaction.ttl=30 sec
+        create: yes
+    - name: Set content cache expiration
+      lineinfile:
+        path: "{{ nifi_home }}/conf/nifi.properties"
+        regexp: ^#?nifi\.remote\.contents\.cache\.expiration=
+        line: nifi.remote.contents.cache.expiration=30 secs
+        create: yes
     - name: Start NiFi
-      become: yes
       become_user: "{{ nifi_user }}"
       command: "{{ nifi_home }}/bin/nifi.sh start"
       environment:
@@ -91,7 +114,7 @@
     - name: Wait for NiFi to start listening on 8080
       wait_for:
         port: 8080
-        delay: 10
+        delay: 5
         timeout: 300
     - name: Check NiFi status
       command: "{{ nifi_home }}/bin/nifi.sh status"
