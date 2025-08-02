@@ -2,6 +2,10 @@
 - name: Deploy and start NiFi
   hosts: ec2
   become: yes
+  vars:
+    nifi_home: /opt/nifi-1.26.0
+    nifi_user: ubuntu
+    nifi_group: ubuntu
 
   tasks:
     - name: Ensure unzip is installed
@@ -9,21 +13,34 @@
         name: unzip
         state: present
 
-    - name: Unarchive NiFi to /opt
+    - name: Unarchive NiFi to {{ nifi_home }}
       unarchive:
         src: /home/ubuntu/nifi-1.26.0-bin.zip
         dest: /opt
         remote_src: yes
-        owner: ubuntu
-        group: ubuntu
+        owner: "{{ nifi_user }}"
+        group: "{{ nifi_group }}"
 
     - name: Set ownership on NiFi directory
       file:
-        path: /opt/nifi-1.26.0
+        path: "{{ nifi_home }}"
         state: directory
-        owner: ubuntu
-        group: ubuntu
+        owner: "{{ nifi_user }}"
+        group: "{{ nifi_group }}"
         recurse: yes
+
+    - name: Ensure NiFi scripts are executable
+      file:
+        path: "{{ nifi_home }}/bin/nifi.sh"
+        mode: '0755'
+
+    - name: Ensure NiFi logs directory exists
+      file:
+        path: "{{ nifi_home }}/logs"
+        state: directory
+        owner: "{{ nifi_user }}"
+        group: "{{ nifi_group }}"
+        mode: '0755'
 
     - name: Find JAVA_HOME path on target host
       shell: |
@@ -31,40 +48,39 @@
       register: java_home_path_cmd
       changed_when: false
 
-    - name: Configure JAVA_HOME in NiFi bootstrap.conf
-      lineinfile:
-        path: /opt/nifi-1.26.0/conf/bootstrap.conf
-        regexp: '^java.home='
-        line: "java.home={{ java_home_path_cmd.stdout }}"
-        create: yes
-
-    - name: Update nifi.web.http.host to listen on all interfaces
+    - name: Configure java.home in bootstrap.conf
       replace:
-        path: /opt/nifi-1.26.0/conf/nifi.properties
+        path: "{{ nifi_home }}/conf/bootstrap.conf"
+        regexp: '^# java.home=.*'
+        replace: "java.home={{ java_home_path_cmd.stdout }}"
+
+    - name: Listen on every interface for the NiFi UI
+      replace:
+        path: "{{ nifi_home }}/conf/nifi.properties"
         regexp: '^nifi.web.http.host=.*'
-        replace: 'nifi.web.http.host='
+        replace: 'nifi.web.http.host=0.0.0.0'
 
     - name: Comment out nifi.web.https.host
       replace:
-        path: /opt/nifi-1.26.0/conf/nifi.properties
+        path: "{{ nifi_home }}/conf/nifi.properties"
         regexp: '^(nifi.web.https.host=.*)'
         replace: '# \1'
 
     - name: Comment out nifi.web.https.port
       replace:
-        path: /opt/nifi-1.26.0/conf/nifi.properties
+        path: "{{ nifi_home }}/conf/nifi.properties"
         regexp: '^(nifi.web.https.port=.*)'
         replace: '# \1'
 
     - name: Set nifi.remote.input.secure to false
       replace:
-        path: /opt/nifi-1.26.0/conf/nifi.properties
+        path: "{{ nifi_home }}/conf/nifi.properties"
         regexp: '^nifi.remote.input.secure=.*'
         replace: 'nifi.remote.input.secure=false'
 
     - name: Clear specified NiFi security properties
       lineinfile:
-        path: /opt/nifi-1.26.0/conf/nifi.properties
+        path: "{{ nifi_home }}/conf/nifi.properties"
         regexp: '^nifi.security.{{ item }}=.*'
         line: "nifi.security.{{ item }}="
         backrefs: yes
@@ -78,12 +94,19 @@
         - truststorePasswd
 
     - name: Start NiFi
-      command: /opt/nifi-1.26.0/bin/nifi.sh start
+      command: "{{ nifi_home }}/bin/nifi.sh start"
       environment:
         JAVA_HOME: "{{ java_home_path_cmd.stdout }}"
 
+    - name: Wait for NiFi HTTP port
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: 8080
+        delay: 5
+        timeout: 120
+
     - name: Check NiFi status
-      command: /opt/nifi-1.26.0/bin/nifi.sh status
+      command: "{{ nifi_home }}/bin/nifi.sh status"
       register: nifi_status
 
     - name: Print NiFi status
