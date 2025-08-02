@@ -49,10 +49,12 @@
       changed_when: false
 
     - name: Configure java.home in bootstrap.conf
-      replace:
+      lineinfile:
         path: "{{ nifi_home }}/conf/bootstrap.conf"
-        regexp: '^# java.home=.*'
-        replace: "java.home={{ java_home_path_cmd.stdout }}"
+        regexp: '^java\.home='
+        line: "java.home={{ java_home_path_cmd.stdout }}"
+        create: yes
+
 
     - name: Listen on every interface for the NiFi UI
       replace:
@@ -94,9 +96,12 @@
         - truststorePasswd
 
     - name: Start NiFi
+      become: yes
+      become_user: "{{ nifi_user }}"
       command: "{{ nifi_home }}/bin/nifi.sh start"
       environment:
         JAVA_HOME: "{{ java_home_path_cmd.stdout }}"
+
 
     - name: Wait for NiFi HTTP port
       wait_for:
