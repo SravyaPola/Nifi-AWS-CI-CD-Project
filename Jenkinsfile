@@ -9,7 +9,9 @@ pipeline {
 
     stages {
         stage('Clean Workspace') {
-            steps { cleanWs() }
+            steps {
+                cleanWs()
+            }
         }
 
         stage('Checkout Code') {
@@ -34,7 +36,9 @@ pipeline {
         }
 
         stage('Generate Ansible Inventory') {
-            steps { sh 'bash scripts/gen-inventory.sh' }
+            steps {
+                sh 'bash scripts/gen-inventory.sh'
+            }
         }
 
         stage('Wait for SSH') {
@@ -46,9 +50,9 @@ pipeline {
                     ).trim()
                     sh '''
                         for i in {1..30}; do
-                        nc -zv ${EC2_PUBLIC_IP} 22 && break
-                        echo "Waiting for SSH on ${EC2_PUBLIC_IP}..."
-                        sleep 10
+                          nc -zv ${EC2_PUBLIC_IP} 22 && break
+                          echo "Waiting for SSH on ${EC2_PUBLIC_IP}..."
+                          sleep 10
                         done
                     '''
                 }
@@ -63,23 +67,7 @@ pipeline {
             }
         }
 
-        stage('Download NiFi Artifact') {
-            steps {
-                sh 'curl -L -o ${NIFI_ZIP_NAME} ${NIFI_ARTIFACT_URL}'
-            }
-        }
-
-        stage('Copy NiFi Zip to EC2') {
-            steps {
-                sshagent(credentials: ['nifi-ssh-key']) {
-                    sh '''
-                        scp -o StrictHostKeyChecking=no ${NIFI_ZIP_NAME} ubuntu@${EC2_PUBLIC_IP}:${REMOTE_NIFI_ZIP}
-                    '''
-                }
-            }
-        }
-
-        stage('Deploy & Start NiFi with JAVA_HOME configured') {
+        stage('Deploy & Start NiFi') {
             steps {
                 sshagent(credentials: ['nifi-ssh-key']) {
                     sh 'ansible-playbook -i inventory.ini ansible/playbooks/deploy-nifi.yml'
