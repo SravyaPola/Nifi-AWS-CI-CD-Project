@@ -21,10 +21,9 @@
     - name: Set ownership on NiFi directory
       file:
         path: "{{ nifi_home }}"
-        state: directory
+        recurse: yes
         owner: "{{ nifi_user }}"
         group: "{{ nifi_group }}"
-        recurse: yes
     - name: Ensure NiFi scripts are executable
       file:
         path: "{{ nifi_home }}/bin/nifi.sh"
@@ -37,8 +36,7 @@
         group: "{{ nifi_group }}"
         mode: "0755"
     - name: Find JAVA_HOME path on target host
-      shell: |
-        readlink -f $(which java) | sed "s:bin/java::"
+      shell: readlink -f $(which java) | sed "s:bin/java::"
       register: java_home_path_cmd
       changed_when: false
     - name: Configure java.home in bootstrap.conf
@@ -65,7 +63,7 @@
         regexp: ^#?nifi\.web\.http\.network\.interface\.default=
         line: nifi.web.http.network.interface.default=
         create: yes
-    - name: Comment out HTTPS and security properties
+    - name: Comment out NiFi HTTPS & security props
       replace:
         path: "{{ nifi_home }}/conf/nifi.properties"
         regexp: ^(nifi\.web\.https\.(host|port)|nifi\.security\.(keystore|keystoreType|keystorePasswd|keyPasswd|truststore|truststoreType|truststorePasswd))=.*
