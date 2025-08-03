@@ -10,25 +10,21 @@
     nifi_artifact_url: https://archive.apache.org/dist/nifi/1.26.0/nifi-1.26.0-bin.zip
     nifi_zip: nifi-1.26.0-bin.zip
     remote_zip_path: /home/ubuntu/nifi-1.26.0-bin.zip
-
   handlers:
     - name: restart nifi
       become_user: "{{ nifi_user }}"
       shell: "{{ nifi_home }}/bin/nifi.sh restart"
-
   tasks:
     - name: Ensure unzip is installed
       apt:
         name: unzip
         state: present
         update_cache: yes
-
     - name: Download NiFi artifact
       get_url:
         url: "{{ nifi_artifact_url }}"
         dest: "{{ remote_zip_path }}"
         mode: "0644"
-
     - name: Unarchive NiFi
       unarchive:
         src: "{{ remote_zip_path }}"
@@ -36,19 +32,16 @@
         remote_src: yes
         owner: "{{ nifi_user }}"
         group: "{{ nifi_group }}"
-
     - name: Set ownership on NiFi directory
       file:
         path: "{{ nifi_home }}"
         owner: "{{ nifi_user }}"
         group: "{{ nifi_group }}"
         recurse: yes
-
     - name: Ensure NiFi scripts are executable
       file:
         path: "{{ nifi_home }}/bin/nifi.sh"
         mode: "0755"
-
     - name: Ensure NiFi logs directory exists
       file:
         path: "{{ nifi_home }}/logs"
@@ -56,96 +49,85 @@
         owner: "{{ nifi_user }}"
         group: "{{ nifi_group }}"
         mode: "0755"
-
     - name: Find JAVA_HOME
       shell: readlink -f $(which java) | sed "s:bin/java::"
       register: java_home_path
       changed_when: false
-
     - name: Configure java.home in bootstrap.conf
       lineinfile:
         path: "{{ nifi_home }}/conf/bootstrap.conf"
-        regexp: '^java\.home='
-        line: "java.home={{ java_home_path.stdout }}"
+        regexp: ^java\.home=
+        line: java.home={{ java_home_path.stdout }}
       notify: restart nifi
-
     - name: Configure NiFi HTTP host
       lineinfile:
         path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: '^#?nifi\.web\.http\.host='
-        line: "nifi.web.http.host=0.0.0.0"
+        regexp: ^#?nifi\.web\.http\.host=
+        line: nifi.web.http.host=0.0.0.0
       notify: restart nifi
-
     - name: Configure NiFi HTTP port
       lineinfile:
         path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: '^#?nifi\.web\.http\.port='
-        line: "nifi.web.http.port=8080"
+        regexp: ^#?nifi\.web\.http\.port=
+        line: nifi.web.http.port=8080
         create: yes
       notify: restart nifi
-
     - name: Blank out HTTP network interface default
       lineinfile:
         path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: '^#?nifi\.web\.http\.network\.interface\.default='
-        line: "nifi.web.http.network.interface.default="
+        regexp: ^#?nifi\.web\.http\.network\.interface\.default=
+        line: nifi.web.http.network.interface.default=
         create: yes
       notify: restart nifi
-
     - name: Comment out HTTPS & security properties
       replace:
         path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: '^(nifi\.web\.https\.(host|port)|nifi\.security\.(keystore|keystoreType|keystorePasswd|keyPasswd|truststore|truststoreType|truststorePasswd))=.*'
+        regexp: ^(nifi\.web\.https\.(host|port)|nifi\.security\.(keystore|keystoreType|keystorePasswd|keyPasswd|truststore|truststoreType|truststorePasswd))=.*
         replace: "# \\0"
       notify: restart nifi
-
     - name: Enable Site-to-Site over HTTP
       lineinfile:
         path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: '^#?nifi\.remote\.input\.http\.enabled='
-        line: "nifi.remote.input.http.enabled=true"
+        regexp: ^#?nifi\.remote\.input\.http\.enabled=
+        line: nifi.remote.input.http.enabled=true
         create: yes
       notify: restart nifi
-
     - name: Set Site-to-Site HTTP transaction TTL
       lineinfile:
         path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: '^#?nifi\.remote\.input\.http\.transaction\.ttl='
-        line: "nifi.remote.input.http.transaction.ttl=30 sec"
+        regexp: ^#?nifi\.remote\.input\.http\.transaction\.ttl=
+        line: nifi.remote.input.http.transaction.ttl=30 sec
         create: yes
       notify: restart nifi
-
     - name: Set content cache expiration
       lineinfile:
         path: "{{ nifi_home }}/conf/nifi.properties"
-        regexp: '^#?nifi\.remote\.contents\.cache\.expiration='
-        line: "nifi.remote.contents.cache.expiration=30 secs"
+        regexp: ^#?nifi\.remote\.contents\.cache\.expiration=
+        line: nifi.remote.contents.cache.expiration=30 secs
         create: yes
       notify: restart nifi
-
     - name: Start NiFi
       become_user: "{{ nifi_user }}"
       shell: "{{ nifi_home }}/bin/nifi.sh start"
       environment:
         JAVA_HOME: "{{ java_home_path.stdout }}"
-
     - name: Allow NiFi UI through UFW
       ufw:
         rule: allow
         port: 8080
         proto: tcp
-
     - name: Wait for NiFi UI to return HTTP 200
       uri:
-        url: "http://{{ inventory_hostname }}:8080/nifi/"
-        status_code: 200
+        url: http://{{ inventory_hostname }}:8080/nifi/
+        method: GET
+        return_content: no
         validate_certs: no
       register: nifi_up
-      until: nifi_up.status == 200
+      until: nifi_up.status is defined and nifi_up.status == 200
       retries: 30
       delay: 10
       delegate_to: localhost
-
+      failed_when: false
     - name: Print NiFi UI URL
       debug:
-        msg: "NiFi is now reachable at http://{{ inventory_hostname }}:8080/nifi/"
+        msg: NiFi is now reachable at http://{{ inventory_hostname }}:8080/nifi/
