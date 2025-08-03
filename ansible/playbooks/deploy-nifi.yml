@@ -22,16 +22,18 @@
       aws_s3:
         bucket: "{{ s3_bucket }}"
         object: "{{ nifi_zip }}"
-        dest: "{{ remote_zip_path }}"
+        dest: "/tmp/{{ nifi_zip }}"
         mode: get
         region: "{{ region }}"
       delegate_to: localhost
       run_once: true
+      become: no
 
-    - name: Copy NiFi zip to remote host
+    - name: Copy NiFi zip to EC2 instance
       copy:
-        src: "{{ remote_zip_path }}"
+        src: "/tmp/{{ nifi_zip }}"
         dest: "{{ remote_zip_path }}"
+      become: no
 
     - name: Unarchive NiFi
       unarchive:
