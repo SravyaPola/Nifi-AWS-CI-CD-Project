@@ -2,25 +2,46 @@
 - name: Install Java 17
   hosts: ec2
   become: yes
+  gather_facts: no
+
+  vars:
+    default_java_home: /usr/lib/jvm/java-17-openjdk-amd64
+
   tasks:
-    - name: Update APT cache
-      apt:
-        update_cache: yes
     - name: Install OpenJDK 17
       apt:
+        update_cache: yes
         name: openjdk-17-jdk
         state: present
-    - name: Find JAVA_HOME
-      shell: readlink -f $(which java) | sed "s:bin/java::"
-      register: java_home_path
+
+    - name: Discover JAVA_HOME
+      command: readlink -f $(which java)
+      register: java_path
       changed_when: false
-    - name: Set JAVA_HOME for all sessions (profile)
-      lineinfile:
-        path: /etc/profile.d/java.sh
-        create: yes
-        mode: "0755"
-        line: export JAVA_HOME={{ java_home_path.stdout }}
-    - name: Export JAVA_HOME for current playbook run
+
+    - name: Set fact java_home
       set_fact:
-        ansible_env:
-          JAVA_HOME: "{{ java_home_path.stdout }}"
+        java_home: >-
+          {{ java_path.stdout
+             | default(default_java_home)
+             | regex_replace('/bin/java$','') }}
+
+    - name: Persist JAVA_HOME for all users
+      copy:
+        dest: /etc/profile.d/java.sh
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          export JAVA_HOME={{ java_home }}
+          export PATH=$JAVA_HOME/bin:$PATH
+
+    - name: Verify JAVA_HOME
+      shell: |
+        source /etc/profile.d/java.sh
+        echo "JAVA_HOME is $JAVA_HOME"
+      register: verify
+      changed_when: false
+
+    - debug:
+        msg: "{{ verify.stdout }}"

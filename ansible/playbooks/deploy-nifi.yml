@@ -28,6 +28,11 @@
         remote_src: yes
         owner: "{{ nifi_user }}"
         group: "{{ nifi_group }}"
+        creates: "{{ nifi_home }}/bin/nifi.sh"
+    - name: Remove NiFi zip after extraction
+      file:
+        path: "{{ remote_zip_path }}"
+        state: absent
     - name: Set ownership on NiFi directory
       file:
         path: "{{ nifi_home }}"
@@ -105,17 +110,13 @@
       shell: |
         {{ nifi_home }}/bin/nifi.sh restart || {{ nifi_home }}/bin/nifi.sh start
       environment:
-        JAVA_HOME: "{{ java_home_path.stdout }}"
+        JAVA_HOME: "{{ java_home }}"
     - name: Wait for NiFi to bind HTTP on 8080
-      become: false
-      run_once: true
-      delegate_to: localhost
       wait_for:
-        host: "{{ hostvars[inventory_hostname].ansible_host | default(inventory_hostname) }}"
         port: 8080
-        state: started
         delay: 10
         timeout: 300
+        state: started
     - name: Print NiFi UI URL
       debug:
         msg: NiFi is now reachable at http://{{ inventory_hostname }}:8080/nifi/
