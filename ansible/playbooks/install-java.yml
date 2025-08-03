@@ -15,7 +15,7 @@
         state: present
 
     - name: Discover JAVA_HOME
-      command: readlink -f $(which java)
+      command: readlink -f "$(which java)"
       register: java_path
       changed_when: false
 

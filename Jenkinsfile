@@ -1,91 +1,77 @@
 pipeline {
-    agent any
-
-    environment {
-        NIFI_ARTIFACT_URL = 'https://archive.apache.org/dist/nifi/1.26.0/nifi-1.26.0-bin.zip'
+  agent any
+  environment {
+    AWS_DEFAULT_REGION = 'us-east-2'
+    NIFI_BUCKET        = 'my-nifi-artifacts'
+    NIFI_VERSION       = '1.26.0'
+  }
+  stages {
+    stage('Clean & Checkout') {
+      steps {
+        cleanWs()
+        checkout scm
+      }
     }
 
-    stages {
-        stage('Clean Workspace') {
-            steps { cleanWs() }
+    stage('Terraform Apply') {
+      steps {
+        dir('terraform') {
+          withCredentials([usernamePassword(credentialsId: 'aws-creds',
+                                            usernameVariable: 'AWS_ACCESS_KEY_ID',
+                                            passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+            sh """
+              terraform init
+              terraform apply -auto-approve \
+                -var="aws_region=${AWS_DEFAULT_REGION}" \
+                -var="s3_bucket_name=${NIFI_BUCKET}"
+            """
+          }
         }
-
-        stage('Checkout Code') {
-            steps {
-                git url: 'https://github.com/SravyaPola/Nifi-AWS-CI-CD-Project.git', branch: 'main'
-            }
-        }
-
-        stage('Terraform Init & Apply') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'aws-creds',
-                    usernameVariable: 'AWS_ACCESS_KEY_ID',
-                    passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-                )]) {
-                    dir('terraform') {
-                        sh 'terraform init'
-                        sh 'terraform apply -auto-approve'
-                    }
-                }
-            }
-        }
-
-        stage('Generate Ansible Inventory') {
-            steps {
-                sh 'bash scripts/gen-inventory.sh'
-            }
-        }
-
-        stage('Wait for SSH') {
-            steps {
-                script {
-                    env.EC2_PUBLIC_IP = sh(
-                        script: 'terraform -chdir=terraform output -raw nifi_public_ip',
-                        returnStdout: true
-                    ).trim()
-                    sh '''
-                        for i in {1..30}; do
-                          nc -zv ${EC2_PUBLIC_IP} 22 && break
-                          echo "Waiting for SSH on ${EC2_PUBLIC_IP}..."
-                          sleep 10
-                        done
-                    '''
-                }
-            }
-        }
-
-        stage('Install Java and Setup JAVA_HOME') {
-            steps {
-                sshagent(credentials: ['nifi-ssh-key']) {
-                    sh 'ansible-playbook -i inventory.ini ansible/playbooks/install-java.yml'
-                }
-            }
-        }
-
-        stage('Deploy & Start NiFi') {
-            steps {
-                sshagent(credentials: ['nifi-ssh-key']) {
-                    sh 'ansible-playbook -i inventory.ini ansible/playbooks/deploy-nifi.yml'
-                }
-            }
-        }
+      }
     }
 
-    post {
-        success {
-            script {
-                def ip = sh(
-                    script: 'terraform -chdir=terraform output -raw nifi_public_ip',
-                    returnStdout: true
-                ).trim()
-                echo "=============================="
-                echo "NiFi is up at: http://${ip}:8080/nifi"
-                echo "=============================="
-            }
-        }
-        failure {
-            echo 'Build or deployment failed. Check the logs for details.'
-        }
+    stage('Generate Inventory') {
+      steps {
+        sh 'bash scripts/gen-inventory.sh'
+      }
     }
+
+    stage('Install Java') {
+      steps {
+        sshagent(['nifi-ssh-key']) {
+          sh """
+            ansible-playbook \
+              -i inventory.ini \
+              ansible/playbooks/install-java.yml \
+              --extra-vars "aws_region=${AWS_DEFAULT_REGION}"
+          """
+        }
+      }
+    }
+
+    stage('Deploy NiFi') {
+      steps {
+        sshagent(['nifi-ssh-key']) {
+          sh """
+            ansible-playbook \
+              -i inventory.ini \
+              ansible/playbooks/deploy-nifi.yml \
+              --extra-vars " \
+                s3_bucket_name=${NIFI_BUCKET} \
+                aws_region=${AWS_DEFAULT_REGION} \
+                java_home=\$(ssh -o StrictHostKeyChecking=no ubuntu@\$(terraform -chdir=terraform output -raw nifi_public_ip) 'readlink -f \$(which java) | sed \"s:/bin/java\$::\"') \
+              "
+          """
+        }
+      }
+    }
+  }
+  post {
+    success {
+      script {
+        def ip = sh(script: "terraform -chdir=terraform output -raw nifi_public_ip", returnStdout: true).trim()
+        echo "NiFi 👉 http://${ip}:8080/nifi"
+      }
+    }
+  }
 }

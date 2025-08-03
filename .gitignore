@@ -1,3 +1,11 @@
-*.key
-!*.pub
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
 
+# Ansible inventory
+inventory.ini
+
+# SSH keys & build artifacts
+*.pem
+*.zip

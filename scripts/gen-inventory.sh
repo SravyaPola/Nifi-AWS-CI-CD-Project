@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# grab the IP that Terraform just put in outputs
-IP=$(terraform -chdir=terraform output -raw nifi_public_ip)
+cd "$(dirname "$0")/../terraform"
 
-# write a clean inventory
-cat > inventory.ini <<EOF
+IP=$(terraform output -raw nifi_public_ip)
+
+cat > ../inventory.ini <<EOF
 [ec2]
-$IP ansible_user=ubuntu \
-    ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ForwardAgent=yes'
+${IP} ansible_host=${IP} ansible_user=ubuntu \
+      ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+
 EOF
 
-
-echo "Wrote inventory.ini → $IP"
+echo "Wrote inventory.ini → ${IP}"
