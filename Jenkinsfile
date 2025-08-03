@@ -9,12 +9,12 @@ pipeline {
   stages {
     stage('Terraform Apply') {
       steps {
-        withCredentials([usernamePassword(credentialsId: 'aws-creds',
-            usernameVariable: 'AWS_ACCESS_KEY_ID',
-            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+        withCredentials([usernamePassword(
+          credentialsId: 'aws-creds',
+          usernameVariable: 'AWS_ACCESS_KEY_ID',
+          passwordVariable: 'AWS_SECRET_ACCESS_KEY'
         )]) {
           dir('terraform') {
-            // Pass AWS creds to Terraform
             sh '''
               export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
               export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
@@ -42,10 +42,10 @@ pipeline {
 
     stage('Deploy NiFi') {
       steps {
-        // Export AWS creds so Ansible can access S3!
-        withCredentials([usernamePassword(credentialsId: 'aws-creds',
-            usernameVariable: 'AWS_ACCESS_KEY_ID',
-            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+        withCredentials([usernamePassword(
+          credentialsId: 'aws-creds',
+          usernameVariable: 'AWS_ACCESS_KEY_ID',
+          passwordVariable: 'AWS_SECRET_ACCESS_KEY'
         )]) {
           sshagent(['nifi-ssh-key']) {
             sh '''
