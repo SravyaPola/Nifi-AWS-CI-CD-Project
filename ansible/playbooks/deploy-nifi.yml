@@ -132,11 +132,19 @@
             line: 'nifi.remote.contents.cache.expiration=30 secs'
             create: yes
 
-    - name: Start NiFi
+    - name: Ensure JAVA_HOME is in /etc/environment
+      lineinfile:
+        path: /etc/environment
+        regexp: '^JAVA_HOME='
+        line: 'JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64'
+        create: yes
+
+    - name: Source /etc/environment and start NiFi with nohup (as ubuntu)
+      become: yes
       become_user: ubuntu
       shell: |
-        export JAVA_HOME={{ java_home }}
-        {{ nifi_home }}/bin/nifi.sh stop || true
-        {{ nifi_home }}/bin/nifi.sh start
+        source /etc/environment
+        nohup /opt/nifi-1.26.0/bin/nifi.sh start > /tmp/nifi-ansible.log 2>&1 &
       args:
         executable: /bin/bash
+
