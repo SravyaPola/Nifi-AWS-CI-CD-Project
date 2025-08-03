@@ -9,3 +9,4 @@ inventory.ini
 # SSH keys & build artifacts
 *.pem
 *.zip
+terraform/nifi-key
