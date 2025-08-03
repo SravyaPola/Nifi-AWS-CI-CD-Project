@@ -50,8 +50,3 @@ resource "aws_instance" "nifi" {
     Name = "NiFi_Instance"
   }
 }
-
-output "nifi_public_ip" {
-  description = "Public IP of the NiFi EC2"
-  value       = aws_instance.nifi.public_ip
-}
