@@ -1,131 +1,127 @@
 ---
 - name: Full NiFi Deployment
   hosts: ec2
-  remote_user: ubuntu
   become: yes
 
   vars:
-    nifi_version: "1.26.0"
-    nifi_home: "/opt/nifi-{{ nifi_version }}"
-    nifi_zip: "nifi-{{ nifi_version }}-bin.zip"
-    remote_zip: "/home/ubuntu/{{ nifi_zip }}"
-    # these two must be passed from Jenkins via --extra-vars
-    s3_bucket: "{{ s3_bucket_name }}"
-    aws_region: "{{ aws_region }}"
+    nifi_home: /opt/nifi-1.26.0
+    nifi_zip: nifi-1.26.0-bin.zip
+    remote_zip_path: /home/ubuntu/nifi-1.26.0-bin.zip
 
   tasks:
-    - name: Ensure unzip, awscli & boto3 are installed
+    - name: Ensure unzip and pip3/boto3 are installed
       apt:
-        update_cache: yes
         name:
           - unzip
-          - awscli
-          - python3-boto3
+          - python3-pip
         state: present
+        update_cache: yes
 
-    - name: Download NiFi ZIP from S3 (if missing)
-      shell: >
-        aws s3 cp
-          s3://{{ s3_bucket }}/{{ nifi_zip }}
-          {{ remote_zip }}
-          --region {{ aws_region }}
-      args:
-        creates: "{{ remote_zip }}"
+    - name: Ensure boto3 is installed (for aws_s3 module)
+      pip:
+        name: boto3
+
+    - name: Download NiFi artifact from S3
+      aws_s3:
+        bucket: "{{ s3_bucket }}"
+        object: "{{ nifi_zip }}"
+        dest: "{{ remote_zip_path }}"
+        mode: get
+        region: "{{ region }}"
 
     - name: Unarchive NiFi
       unarchive:
-        src: "{{ remote_zip }}"
+        src: "{{ remote_zip_path }}"
         dest: /opt
         remote_src: yes
-        owner: ubuntu
-        group: ubuntu
-        creates: "{{ nifi_home }}/bin/nifi.sh"
 
-    - name: Delete NiFi ZIP after extraction
+    - name: Remove NiFi zip after extraction
       file:
-        path: "{{ remote_zip }}"
+        path: "{{ remote_zip_path }}"
         state: absent
 
-    - name: Fix permissions on NiFi directory
+    - name: Set permissions on NiFi home
       file:
         path: "{{ nifi_home }}"
         owner: ubuntu
         group: ubuntu
         recurse: yes
 
-    - name: Configure java.home in bootstrap.conf
-      lineinfile:
-        path: "{{ nifi_home }}/conf/bootstrap.conf"
-        regexp: '^java\.home='
-        line: "java.home={{ java_home }}"
-        backrefs: yes
-
-    - name: Configure NiFi HTTP in nifi.properties
+    - name: Configure nifi.properties for HTTP and Site-to-Site
       block:
-        - name: Set HTTP host to 0.0.0.0
+        - name: Set nifi.web.http.host
           lineinfile:
             path: "{{ nifi_home }}/conf/nifi.properties"
-            regexp: '^#?nifi\.web\.http\.host='
+            regexp: '^nifi\.web\.http\.host='
             line: 'nifi.web.http.host=0.0.0.0'
             create: yes
 
-        - name: Set HTTP port to 8080
+        - name: Set nifi.web.http.port
           lineinfile:
             path: "{{ nifi_home }}/conf/nifi.properties"
-            regexp: '^#?nifi\.web\.http\.port='
+            regexp: '^nifi\.web\.http\.port='
             line: 'nifi.web.http.port=8080'
             create: yes
 
-        - name: Disable HTTPS & security props
-          replace:
-            path: "{{ nifi_home }}/conf/nifi.properties"
-            regexp: '^(nifi\.web\.https\..*|nifi\.security\..*)'
-            replace: '# \\0'
-
-        - name: Enable Site-to-Site over HTTP
+        - name: Set nifi.web.http.network.interface.default
           lineinfile:
             path: "{{ nifi_home }}/conf/nifi.properties"
-            regexp: '^#?nifi\.remote\.input\.http\.enabled='
+            regexp: '^nifi\.web\.http\.network\.interface\.default='
+            line: 'nifi.web.http.network.interface.default='
+            create: yes
+
+        - name: Comment out HTTPS and security props
+          replace:
+            path: "{{ nifi_home }}/conf/nifi.properties"
+            regexp: '^(nifi\.web\.https\.host=.*|nifi\.web\.https\.port=.*|nifi\.security\..*)'
+            replace: '#\1'
+
+        - name: Set nifi.remote.input.host empty
+          lineinfile:
+            path: "{{ nifi_home }}/conf/nifi.properties"
+            regexp: '^nifi\.remote\.input\.host='
+            line: 'nifi.remote.input.host='
+            create: yes
+
+        - name: Set nifi.remote.input.secure to false
+          lineinfile:
+            path: "{{ nifi_home }}/conf/nifi.properties"
+            regexp: '^nifi\.remote\.input\.secure='
+            line: 'nifi.remote.input.secure=false'
+            create: yes
+
+        - name: Set nifi.remote.input.socket.port empty
+          lineinfile:
+            path: "{{ nifi_home }}/conf/nifi.properties"
+            regexp: '^nifi\.remote\.input\.socket\.port='
+            line: 'nifi.remote.input.socket.port='
+            create: yes
+
+        - name: Set nifi.remote.input.http.enabled true
+          lineinfile:
+            path: "{{ nifi_home }}/conf/nifi.properties"
+            regexp: '^nifi\.remote\.input\.http\.enabled='
             line: 'nifi.remote.input.http.enabled=true'
             create: yes
 
-        - name: Set Site-to-Site TTL & cache
+        - name: Set nifi.remote.input.http.transaction.ttl
           lineinfile:
             path: "{{ nifi_home }}/conf/nifi.properties"
-            regexp: '^#?nifi\.remote\.input\.http\.transaction\.ttl='
+            regexp: '^nifi\.remote\.input\.http\.transaction\.ttl='
             line: 'nifi.remote.input.http.transaction.ttl=30 sec'
             create: yes
 
-        - name: Set content cache expiration
+        - name: Set nifi.remote.contents.cache.expiration
           lineinfile:
             path: "{{ nifi_home }}/conf/nifi.properties"
-            regexp: '^#?nifi\.remote\.contents\.cache\.expiration='
+            regexp: '^nifi\.remote\.contents\.cache\.expiration='
             line: 'nifi.remote.contents.cache.expiration=30 secs'
             create: yes
 
-    - name: Allow NiFi UI through UFW
-      ufw:
-        rule: allow
-        port: 8080
-        proto: tcp
-
-    - name: Start or restart NiFi
+    - name: Start NiFi
       become_user: ubuntu
       shell: |
         {{ nifi_home }}/bin/nifi.sh stop || true
         {{ nifi_home }}/bin/nifi.sh start
       args:
         executable: /bin/bash
-
-    - name: Wait for NiFi HTTP port to be reachable from Jenkins
-      wait_for:
-        host: "{{ hostvars[inventory_hostname]['ansible_host'] }}"
-        port: 8080
-        delay: 10
-        timeout: 300
-        state: started
-      delegate_to: localhost
-
-    - name: Print NiFi UI URL
-      debug:
-        msg: "NiFi is now up at http://{{ hostvars[inventory_hostname]['ansible_host'] }}:8080/nifi"
