@@ -9,18 +9,15 @@
     remote_zip_path: /home/ubuntu/nifi-1.26.0-bin.zip
 
   tasks:
-    - name: Ensure unzip and pip3/boto3 are installed
+    - name: Ensure unzip, pip3, and boto3 are installed
       apt:
         name:
           - unzip
           - python3-pip
+          - python3-boto3
         state: present
         update_cache: yes
-
-    - name: Ensure boto3 is installed (for aws_s3 module)
-      pip:
-        name: boto3
-
+        
     - name: Download NiFi artifact from S3
       aws_s3:
         bucket: "{{ s3_bucket }}"
