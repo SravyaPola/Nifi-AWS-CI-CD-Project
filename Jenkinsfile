@@ -32,6 +32,19 @@ pipeline {
       }
     }
 
+    stage('Wait for SSH') {
+      steps {
+        script {
+          def publicIp = sh(
+            script: 'terraform -chdir=terraform output -raw nifi_public_ip',
+            returnStdout: true
+          ).trim()
+          // Wait for SSH (port 22) to be available (max 2.5 minutes)
+          sh "for i in {1..30}; do nc -zv $publicIp 22 && exit 0; sleep 5; done; exit 1"
+        }
+      }
+    }
+
     stage('Install Java') {
       steps {
         sshagent(['nifi-ssh-key']) {
@@ -51,7 +64,6 @@ pipeline {
             sh '''
               export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
               export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-              export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
               ansible-playbook -i inventory.ini ansible/playbooks/deploy-nifi.yml \
                 --extra-vars "s3_bucket=${S3_BUCKET} region=${AWS_REGION}"
             '''
