@@ -110,7 +110,7 @@
       shell: |
         {{ nifi_home }}/bin/nifi.sh restart || {{ nifi_home }}/bin/nifi.sh start
       environment:
-        JAVA_HOME: "{{ java_home }}"
+        JAVA_HOME: "{{ java_home_path.stdout }}"
     - name: Wait for NiFi to bind HTTP on 8080
       wait_for:
         port: 8080
