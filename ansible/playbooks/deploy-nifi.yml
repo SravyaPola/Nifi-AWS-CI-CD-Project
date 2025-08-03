@@ -17,7 +17,7 @@
           - python3-boto3
         state: present
         update_cache: yes
-        
+
     - name: Download NiFi artifact from S3
       aws_s3:
         bucket: "{{ s3_bucket }}"
@@ -25,6 +25,13 @@
         dest: "{{ remote_zip_path }}"
         mode: get
         region: "{{ region }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Copy NiFi zip to remote host
+      copy:
+        src: "{{ remote_zip_path }}"
+        dest: "{{ remote_zip_path }}"
 
     - name: Unarchive NiFi
       unarchive:
