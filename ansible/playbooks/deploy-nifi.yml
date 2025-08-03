@@ -107,14 +107,15 @@
       environment:
         JAVA_HOME: "{{ java_home_path.stdout }}"
     - name: Wait for NiFi to bind HTTP on 8080
-      delegate_to: localhost
-      connection: local
       become: false
+      run_once: true
+      delegate_to: localhost
       wait_for:
-        host: "{{ inventory_hostname }}"
+        host: "{{ hostvars[inventory_hostname].ansible_host | default(inventory_hostname) }}"
         port: 8080
+        state: started
         delay: 10
-        timeout: 900
+        timeout: 300
     - name: Print NiFi UI URL
       debug:
         msg: NiFi is now reachable at http://{{ inventory_hostname }}:8080/nifi/
