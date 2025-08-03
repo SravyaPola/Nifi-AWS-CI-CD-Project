@@ -1,28 +1,37 @@
 pipeline {
   agent any
+
   environment {
     AWS_REGION = 'us-east-2'
     S3_BUCKET = 'my-nifi-artifacts'
   }
+
   stages {
     stage('Terraform Apply') {
       steps {
         withCredentials([usernamePassword(credentialsId: 'aws-creds',
-          usernameVariable: 'AWS_ACCESS_KEY_ID',
-          passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+            usernameVariable: 'AWS_ACCESS_KEY_ID',
+            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
         )]) {
           dir('terraform') {
-            sh 'terraform init'
-            sh 'terraform apply -auto-approve'
+            // Pass AWS creds to Terraform
+            sh '''
+              export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+              export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+              terraform init
+              terraform apply -auto-approve
+            '''
           }
         }
       }
     }
+
     stage('Generate Inventory') {
       steps {
         sh 'bash scripts/gen-inventory.sh'
       }
     }
+
     stage('Install Java') {
       steps {
         sshagent(['nifi-ssh-key']) {
@@ -30,17 +39,27 @@ pipeline {
         }
       }
     }
+
     stage('Deploy NiFi') {
       steps {
-        sshagent(['nifi-ssh-key']) {
-          sh '''
-            ansible-playbook -i inventory.ini ansible/playbooks/deploy-nifi.yml \
-              --extra-vars "s3_bucket=${S3_BUCKET} region=${AWS_REGION}"
-          '''
+        // Export AWS creds so Ansible can access S3!
+        withCredentials([usernamePassword(credentialsId: 'aws-creds',
+            usernameVariable: 'AWS_ACCESS_KEY_ID',
+            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+        )]) {
+          sshagent(['nifi-ssh-key']) {
+            sh '''
+              export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+              export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+              ansible-playbook -i inventory.ini ansible/playbooks/deploy-nifi.yml \
+                --extra-vars "s3_bucket=${S3_BUCKET} region=${AWS_REGION}"
+            '''
+          }
         }
       }
     }
   }
+
   post {
     success {
       script {
