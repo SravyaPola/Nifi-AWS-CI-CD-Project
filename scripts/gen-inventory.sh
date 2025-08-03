@@ -1,11 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-IP=$(terraform -chdir=terraform output -raw nifi_public_ip)
-
-cat > inventory.ini <<EOF
-[ec2]
-$IP ansible_user=ubuntu ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ForwardAgent=yes'
-EOF
-
-echo "Wrote inventory.ini → $IP"
+#!/bin/bash
+public_ip=$(terraform -chdir=terraform output -raw nifi_public_ip)
+echo "[nifi]" > inventory.ini
+echo "$public_ip ansible_user=ubuntu ansible_ssh_private_key_file=./nifi-key.pem" >> inventory.ini
+echo "Wrote inventory.ini → $public_ip"

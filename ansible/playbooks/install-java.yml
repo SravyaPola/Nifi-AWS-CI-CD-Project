@@ -1,6 +1,6 @@
 ---
 - name: Install Java 17
-  hosts: ec2
+  hosts: nifi
   become: yes
   gather_facts: no
 

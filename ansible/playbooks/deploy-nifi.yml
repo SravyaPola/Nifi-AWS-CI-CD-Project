@@ -1,6 +1,6 @@
 ---
 - name: Full NiFi Deployment
-  hosts: ec2
+  hosts: nifi
   become: yes
 
   vars:
