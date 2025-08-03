@@ -51,6 +51,7 @@ pipeline {
             sh '''
               export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
               export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+              export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
               ansible-playbook -i inventory.ini ansible/playbooks/deploy-nifi.yml \
                 --extra-vars "s3_bucket=${S3_BUCKET} region=${AWS_REGION}"
             '''

@@ -7,6 +7,7 @@
     nifi_home: /opt/nifi-1.26.0
     nifi_zip: nifi-1.26.0-bin.zip
     remote_zip_path: /home/ubuntu/nifi-1.26.0-bin.zip
+    java_home: /usr/lib/jvm/java-17-openjdk-amd64
 
   tasks:
     - name: Ensure unzip, pip3, and boto3 are installed
@@ -17,6 +18,13 @@
           - python3-boto3
         state: present
         update_cache: yes
+
+    - name: Set JAVA_HOME system-wide for all users
+      lineinfile:
+        path: /etc/profile.d/java_home.sh
+        line: "export JAVA_HOME={{ java_home }}"
+        create: yes
+        state: present
 
     - name: Download NiFi artifact from S3
       aws_s3:
@@ -127,6 +135,7 @@
     - name: Start NiFi
       become_user: ubuntu
       shell: |
+        export JAVA_HOME={{ java_home }}
         {{ nifi_home }}/bin/nifi.sh stop || true
         {{ nifi_home }}/bin/nifi.sh start
       args:
