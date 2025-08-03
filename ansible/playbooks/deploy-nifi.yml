@@ -107,12 +107,14 @@
       environment:
         JAVA_HOME: "{{ java_home_path.stdout }}"
     - name: Wait for NiFi to bind HTTP on 8080
+      delegate_to: localhost
+      connection: local
+      become: false
       wait_for:
         host: "{{ inventory_hostname }}"
         port: 8080
         delay: 10
         timeout: 900
-      delegate_to: localhost
     - name: Print NiFi UI URL
       debug:
         msg: NiFi is now reachable at http://{{ inventory_hostname }}:8080/nifi/
