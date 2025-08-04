@@ -4,6 +4,7 @@ pipeline {
   environment {
     AWS_REGION = 'us-east-2'
     S3_BUCKET = 'my-nifi-artifacts'
+    NIFI_VERSION  = '1.26.0'
   }
 
   stages {
