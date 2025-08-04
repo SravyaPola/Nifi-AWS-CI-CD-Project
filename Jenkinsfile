@@ -2,9 +2,9 @@ pipeline {
   agent any
 
   environment {
-    AWS_REGION = 'us-east-2'
-    S3_BUCKET = 'my-nifi-artifacts'
-    NIFI_VERSION  = '1.26.0'
+    AWS_REGION   = 'us-east-2'
+    S3_BUCKET    = 'my-nifi-artifacts'
+    NIFI_VERSION = '1.26.0'
   }
 
   stages {
@@ -73,65 +73,67 @@ pipeline {
     }
 
     stage('Containerize & Push to ECR') {
-        steps {
-            withCredentials([usernamePassword(
-            credentialsId: 'aws-creds',
-            usernameVariable: 'AWS_ACCESS_KEY_ID',
-            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-            )]) {
-            sh '''
-                AWS_ACCOUNT_ID=$(aws sts get-caller-identity \
-                --query Account --output text --region ${AWS_REGION})
-                ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-                ECR_REPO="nifi-custom"
-                IMAGE_TAG="${NIFI_VERSION}"
-                FULL_TAG="${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG}"
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: 'aws-creds',
+          usernameVariable: 'AWS_ACCESS_KEY_ID',
+          passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+        )]) {
+          script {
+            def acctId   = sh(
+              script: "aws sts get-caller-identity --query Account --output text --region ${AWS_REGION}",
+              returnStdout: true
+            ).trim()
+            def registry = "${acctId}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+            def repo     = "nifi-custom"
+            def imageTag = "${NIFI_VERSION}"
+            env.FULL_TAG = "${registry}/${repo}:${imageTag}"
 
-                mkdir -p docker
-                aws s3 cp \
-                s3://${S3_BUCKET}/nifi-${IMAGE_TAG}-bin.zip \
-                docker/nifi-${IMAGE_TAG}-bin.zip \
+            sh """
+              mkdir -p docker
+              aws s3 cp \
+                s3://${S3_BUCKET}/nifi-${imageTag}-bin.zip \
+                docker/nifi-${imageTag}-bin.zip \
                 --region ${AWS_REGION}
 
-                aws ecr describe-repositories \
-                    --repository-names ${ECR_REPO} \
-                    --region ${AWS_REGION} \
-                || aws ecr create-repository \
-                    --repository-name ${ECR_REPO} \
-                    --region ${AWS_REGION}
+              aws ecr describe-repositories \
+                --repository-names ${repo} \
+                --region ${AWS_REGION} \
+              || aws ecr create-repository \
+                --repository-name ${repo} \
+                --region ${AWS_REGION}
 
-                aws ecr get-login-password --region ${AWS_REGION} \
-                | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+              aws ecr get-login-password --region ${AWS_REGION} \
+              | docker login --username AWS --password-stdin ${registry}
 
-                docker build \
-                --build-arg NIFI_ZIP=nifi-${IMAGE_TAG}-bin.zip \
-                -t ${FULL_TAG} \
+              docker build \
+                --build-arg NIFI_ZIP=nifi-${imageTag}-bin.zip \
+                -t ${env.FULL_TAG} \
                 docker/
 
-                docker push ${FULL_TAG}
-            '''
-            }
+              docker push ${env.FULL_TAG}
+            """
+          }
         }
+      }
     }
-
   }
 
-    post {
-        success {
-            script {
-            def ip = sh(
-                script: 'terraform -chdir=terraform output -raw nifi_public_ip',
-                returnStdout: true
-            ).trim()
-            echo "=============================="
-            echo "NiFi is up at: http://${ip}:8080/nifi"
-            echo "Docker image pushed to ECR: ${env.FULL_TAG}"
-            echo "=============================="
-            }
-        }
-        failure {
-            echo 'Build, deployment or containerization failed. Check the logs for details.'
-        }
+  post {
+    success {
+      script {
+        def ip = sh(
+          script: 'terraform -chdir=terraform output -raw nifi_public_ip',
+          returnStdout: true
+        ).trim()
+        echo "=============================="
+        echo "NiFi is up at: http://${ip}:8080/nifi"
+        echo "Docker image pushed to ECR: ${env.FULL_TAG}"
+        echo "=============================="
+      }
     }
-
+    failure {
+      echo 'Build, deployment or containerization failed. Check the logs for details.'
+    }
+  }
 }
