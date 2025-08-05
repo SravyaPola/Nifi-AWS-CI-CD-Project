@@ -131,32 +131,45 @@ pipeline {
     }
 
     stage('Deploy NiFi to EKS') {
-      steps {
-        sh '''
-          kubectl apply -f k8s/nifi-namespace.yaml
-          export FULL_TAG=${FULL_TAG}
-          envsubst < k8s/nifi-deployment.yaml | kubectl apply -n nifi -f -
-          kubectl apply -n nifi -f k8s/nifi-service.yaml
-        '''
-      }
+        steps {
+            withCredentials([usernamePassword(
+            credentialsId: env.AWS_CREDS,
+            usernameVariable: 'AWS_ACCESS_KEY_ID',
+            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+            )]) {
+            sh '''
+                kubectl apply -f k8s/nifi-namespace.yaml
+                export FULL_TAG=${FULL_TAG}
+                envsubst < k8s/nifi-deployment.yaml | kubectl apply -n nifi -f -
+                kubectl apply -n nifi -f k8s/nifi-service.yaml
+            '''
+            }
+        }
     }
 
     stage('Expose Endpoints') {
-      steps {
-        script {
-          def ec2Ip = sh(
-            script: 'terraform -chdir=terraform output -raw nifi_public_ip',
-            returnStdout: true
-          ).trim()
-          def eksHost = sh(
-            script: "kubectl -n nifi get svc nifi -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'",
-            returnStdout: true
-          ).trim()
-          echo "NiFi on EC2 → http://${ec2Ip}:8080/nifi"
-          echo "NiFi on EKS → http://${eksHost}:8080/nifi"
+        steps {
+            withCredentials([usernamePassword(
+            credentialsId: env.AWS_CREDS,
+            usernameVariable: 'AWS_ACCESS_KEY_ID',
+            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+            )]) {
+            script {
+                def ec2Ip = sh(
+                script: 'terraform -chdir=terraform output -raw nifi_public_ip',
+                returnStdout: true
+                ).trim()
+                def eksHost = sh(
+                script: "kubectl -n nifi get svc nifi -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'",
+                returnStdout: true
+                ).trim()
+                echo "NiFi on EC2 → http://${ec2Ip}:8080/nifi"
+                echo "NiFi on EKS → http://${eksHost}:8080/nifi"
+            }
+            }
         }
-      }
     }
+
   }
 
   post {
