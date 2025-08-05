@@ -99,7 +99,6 @@ resource "aws_eks_cluster" "eks" {
 
   depends_on = [ aws_iam_role_policy_attachment.eks_cluster_attach ]
 }
-
 resource "aws_eks_node_group" "node_group" {
   cluster_name    = aws_eks_cluster.eks.name
   node_group_name = "${var.cluster_name}-nodes"
