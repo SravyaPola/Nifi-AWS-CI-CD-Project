@@ -10,6 +10,11 @@ pipeline {
   }
 
   stages {
+    stage('Prepare') {
+        steps {
+            cleanWs()
+        }
+    }
     stage('Terraform Apply') {
       steps {
         withCredentials([usernamePassword(
