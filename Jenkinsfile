@@ -13,6 +13,7 @@ pipeline {
     stage('Prepare') {
         steps {
             cleanWs()
+            checkout scm
         }
     }
     stage('Terraform Apply') {
