@@ -5,13 +5,10 @@ ARG NIFI_VERSION=1.26.0
 ARG NIFI_ZIP=nifi-${NIFI_VERSION}-bin.zip
 WORKDIR /tmp
 
-# only needed at build-time:
 RUN apt-get update \
  && apt-get install -y --no-install-recommends unzip curl \
  && rm -rf /var/lib/apt/lists/*
 
-# pull & unpack NiFi
-# (or COPY ${NIFI_ZIP} /tmp/ if you prefer)
 RUN curl -fSL \
      https://archive.apache.org/dist/nifi/${NIFI_VERSION}/${NIFI_ZIP} \
      -o ${NIFI_ZIP} \
@@ -20,7 +17,7 @@ RUN curl -fSL \
  && rm ${NIFI_ZIP}
 
 #── STAGE 2: minimal runtime ───────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-jammy-slim
+FROM eclipse-temurin:17-jre-jammy
 
 # create unprivileged user & group
 RUN groupadd -r nifi && useradd -r -g nifi -d /opt/nifi -s /bin/false nifi
@@ -37,7 +34,7 @@ RUN rm -rf \
      /opt/nifi/conf/templates \
      /opt/nifi/lib/logback* \
      /opt/nifi/lib/kafka-client* \
-     /opt/nifi/lib/mysql-connector*   # remove JDBC drivers you don't need
+     /opt/nifi/lib/mysql-connector*
 
 USER nifi
 WORKDIR /opt/nifi
