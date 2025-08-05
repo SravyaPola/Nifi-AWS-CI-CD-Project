@@ -34,16 +34,17 @@ pipeline {
     }
 
     stage('Wait for SSH') {
-      steps {
-        script {
-          def publicIp = sh(
-            script: 'terraform -chdir=terraform output -raw nifi_public_ip',
-            returnStdout: true
-          ).trim()
-          sh "for i in {1..30}; do nc -zv $publicIp 22 && exit 0; sleep 5; done; exit 1"
+        steps {
+            script {
+            def publicIp = sh(
+                script: 'terraform -chdir=terraform output -raw nifi_public_ip',
+                returnStdout: true
+            ).trim()
+            sh "for i in {1..30}; do nc -zv $publicIp 22 && exit 0; sleep 10; done; exit 1"
+            }
         }
-      }
     }
+
 
     stage('Install Java') {
       steps {
