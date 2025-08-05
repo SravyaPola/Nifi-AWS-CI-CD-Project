@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nifi
+  namespace: nifi
+spec:
+  serviceName: nifi
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nifi
+  template:
+    metadata:
+      labels:
+        app: nifi
+    spec:
+      containers:
+        - name: nifi
+          image: ${FULL_TAG}
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: NIFI_WEB_HTTP_PORT
+              value: "8080"
+          volumeMounts:
+            - name: data
+              mountPath: /opt/nifi/nifi-current/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi

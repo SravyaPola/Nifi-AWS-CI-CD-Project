@@ -1,11 +1,3 @@
-provider "aws" {
-  region = var.aws_region
-}
-
-data "aws_vpc" "default" {
-  default = true
-}
-
 resource "aws_security_group" "nifi_sg" {
   name        = "nifi-sg"
   description = "Allow SSH & NiFi UI"
@@ -49,4 +41,76 @@ resource "aws_instance" "nifi" {
   tags = {
     Name = "NiFi_Instance"
   }
+}
+
+data "aws_iam_policy_document" "eks_assume" {
+  statement {
+    actions   = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["eks.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "eks_cluster_role" {
+  name               = "${var.cluster_name}-cluster-role"
+  assume_role_policy = data.aws_iam_policy_document.eks_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "eks_cluster_attach" {
+  role       = aws_iam_role.eks_cluster_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+}
+
+data "aws_iam_policy_document" "node_assume" {
+  statement {
+    actions   = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "eks_node_role" {
+  name               = "${var.cluster_name}-node-role"
+  assume_role_policy = data.aws_iam_policy_document.node_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "eks_node_attach" {
+  for_each = toset([
+    "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
+    "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
+    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
+  ])
+  role       = aws_iam_role.eks_node_role.name
+  policy_arn = each.key
+}
+
+resource "aws_eks_cluster" "eks" {
+  name     = var.cluster_name
+  version  = var.cluster_version
+  role_arn = aws_iam_role.eks_cluster_role.arn
+
+  vpc_config {
+    subnet_ids = data.aws_subnet_ids.default.ids
+  }
+
+  depends_on = [ aws_iam_role_policy_attachment.eks_cluster_attach ]
+}
+
+resource "aws_eks_node_group" "node_group" {
+  cluster_name    = aws_eks_cluster.eks.name
+  node_group_name = "${var.cluster_name}-nodes"
+  node_role_arn   = aws_iam_role.eks_node_role.arn
+  subnet_ids      = data.aws_subnet_ids.default.ids
+
+  scaling_config {
+    desired_size = var.node_group_desired
+    min_size     = var.node_group_min
+    max_size     = var.node_group_max
+  }
+
+  depends_on = [ aws_iam_role_policy_attachment.eks_node_attach ]
 }
