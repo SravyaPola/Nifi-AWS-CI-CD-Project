@@ -11,7 +11,7 @@ data "aws_subnets" "default" {
    }
 }
 
-# Pull in the Ubuntu EKS-optimized AMI for your k8s version
-data "aws_ssm_parameter" "ubuntu_eks_ami" {
-  name = "/aws/service/canonical/ubuntu/eks/${var.cluster_version}/stable/2024-07-01/amd64/hvm/ebs-gp2/ami-id"
+# Fetch the EKS-optimized Amazon Linux 2 AMI for our k8s version
+data "aws_ssm_parameter" "eks_al2_ami" {
+  name   = "/aws/service/eks/optimized-ami/${var.cluster_version}/amazon-linux-2/recommended/image_id"
 }
