@@ -136,6 +136,13 @@ pipeline {
             }
         }
     }
+    stage('Install EBS CSI Driver') {
+        steps {
+            sh '''
+              kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=release-1.26"
+            '''
+        }
+    }
 
     stage('Deploy NiFi to EKS') {
         steps {

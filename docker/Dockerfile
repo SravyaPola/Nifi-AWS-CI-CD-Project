@@ -35,6 +35,10 @@ RUN rm -rf \
      /opt/nifi/lib/logback* \
      /opt/nifi/lib/kafka-client* \
      /opt/nifi/lib/mysql-connector*
+     
+RUN chmod +x /opt/nifi/bin/nifi.sh \
+ && chmod -R +x /opt/nifi/bin/ \
+ && chown -R nifi:nifi /opt/nifi
 
 USER nifi
 WORKDIR /opt/nifi
