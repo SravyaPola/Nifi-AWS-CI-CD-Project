@@ -11,11 +11,12 @@ pipeline {
 
   stages {
     stage('Prepare') {
-        steps {
-            cleanWs()
-            checkout scm
-        }
+      steps {
+        cleanWs()
+        checkout scm
+      }
     }
+
     stage('Terraform Apply') {
       steps {
         withCredentials([usernamePassword(
@@ -35,6 +36,20 @@ pipeline {
       }
     }
 
+    stage('Cache Terraform Outputs') {
+      steps {
+        script {
+          env.EKS_CLUSTER_NAME = sh(script: 'terraform -chdir=terraform output -raw eks_cluster_name', returnStdout: true).trim()
+          env.SUBNET_IDS_RAW = sh(script: 'terraform -chdir=terraform output -raw subnet_ids', returnStdout: true).trim()
+          env.NIFI_PUBLIC_IP = sh(script: 'terraform -chdir=terraform output -raw nifi_public_ip', returnStdout: true).trim()
+          env.SUBNET_IDS = env.SUBNET_IDS_RAW.replaceAll(',', ' ')
+          echo "Cluster Name: ${env.EKS_CLUSTER_NAME}"
+          echo "Subnets: ${env.SUBNET_IDS}"
+          echo "EC2 NiFi Public IP: ${env.NIFI_PUBLIC_IP}"
+        }
+      }
+    }
+
     stage('Generate Inventory') {
       steps {
         sh 'bash scripts/gen-inventory.sh'
@@ -44,11 +59,15 @@ pipeline {
     stage('Wait for SSH') {
       steps {
         script {
-          def publicIp = sh(
-            script: 'terraform -chdir=terraform output -raw nifi_public_ip',
-            returnStdout: true
-          ).trim()
-          sh "for i in {1..30}; do nc -zv $publicIp 22 && exit 0; sleep 10; done; exit 1"
+          sh """
+            for i in {1..30}; do
+              nc -zv ${env.NIFI_PUBLIC_IP} 22 && exit 0
+              echo 'Waiting for SSH to be available...'
+              sleep 10
+            done
+            echo 'ERROR: SSH port 22 not available after timeout'
+            exit 1
+          """
         }
       }
     }
@@ -57,25 +76,6 @@ pipeline {
       steps {
         sshagent([env.SSH_KEY]) {
           sh 'ansible-playbook -i inventory.ini ansible/playbooks/install-java.yml'
-        }
-      }
-    }
-
-    stage('Deploy NiFi') {
-      steps {
-        withCredentials([usernamePassword(
-          credentialsId: env.AWS_CREDS,
-          usernameVariable: 'AWS_ACCESS_KEY_ID',
-          passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-        )]) {
-          sshagent([env.SSH_KEY]) {
-            sh '''
-              export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-              export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-              ansible-playbook -i inventory.ini ansible/playbooks/deploy-nifi.yml \
-                --extra-vars "s3_bucket=${S3_BUCKET} region=${AWS_REGION}"
-            '''
-          }
         }
       }
     }
@@ -116,102 +116,110 @@ pipeline {
     }
 
     stage('Configure kubectl & Tag Subnets') {
-        steps {
-            withCredentials([usernamePassword(
-            credentialsId: env.AWS_CREDS,
-            usernameVariable: 'AWS_ACCESS_KEY_ID',
-            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-            )]) {
-            sh '''
-                aws eks --region ${AWS_REGION} \
-                update-kubeconfig \
-                --name $(terraform -chdir=terraform output -raw eks_cluster_name)
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: env.AWS_CREDS,
+          usernameVariable: 'AWS_ACCESS_KEY_ID',
+          passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+        )]) {
+          sh """
+            aws eks --region ${AWS_REGION} \
+              update-kubeconfig --name ${EKS_CLUSTER_NAME}
 
-                PUB_SUBNET_IDS=$(terraform -chdir=terraform output -raw subnet_ids)
-                PUB_SUBNET_IDS_SPACE=$(echo "$PUB_SUBNET_IDS" | tr ',' ' ')
-                aws ec2 create-tags \
-                --resources $PUB_SUBNET_IDS_SPACE \
-                --tags Key=kubernetes.io/role/elb,Value=1
-            '''
-            }
+            aws ec2 create-tags \
+              --resources ${SUBNET_IDS} \
+              --tags Key=kubernetes.io/role/elb,Value=1
+          """
         }
+      }
     }
+
     stage('Install EBS CSI Driver') {
-        steps {
-            withCredentials([usernamePassword(
-                credentialsId: env.AWS_CREDS,
-                usernameVariable: 'AWS_ACCESS_KEY_ID',
-                passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-            )]) {
-                sh '''
-                    export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-                    export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: env.AWS_CREDS,
+          usernameVariable: 'AWS_ACCESS_KEY_ID',
+          passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+        )]) {
+          sh """
+            export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+            export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
 
-                    aws eks --region ${AWS_REGION} \
-                    update-kubeconfig \
-                    --name $(terraform -chdir=terraform output -raw eks_cluster_name)
+            aws eks --region ${AWS_REGION} update-kubeconfig --name ${EKS_CLUSTER_NAME}
 
-                    kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=release-1.26"
-                '''
-            }
+            kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=release-1.26"
+
+            kubectl rollout status daemonset/aws-ebs-csi-driver -n kube-system --timeout=3m
+          """
         }
+      }
     }
 
+    stage('Deploy NiFi') {
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: env.AWS_CREDS,
+          usernameVariable: 'AWS_ACCESS_KEY_ID',
+          passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+        )]) {
+          sshagent([env.SSH_KEY]) {
+            sh '''
+              export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+              export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+              ansible-playbook -i inventory.ini ansible/playbooks/deploy-nifi.yml \
+                --extra-vars "s3_bucket=${S3_BUCKET} region=${AWS_REGION}"
+            '''
+          }
+        }
+      }
+    }
 
     stage('Deploy NiFi to EKS') {
-        steps {
-            withCredentials([usernamePassword(
-                credentialsId: env.AWS_CREDS,
-                usernameVariable: 'AWS_ACCESS_KEY_ID',
-                passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-            )]) {
-                sh '''
-                    set -e
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: env.AWS_CREDS,
+          usernameVariable: 'AWS_ACCESS_KEY_ID',
+          passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+        )]) {
+          sh '''
+            set -e
+            export FULL_TAG=${FULL_TAG}
+            export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+            export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
 
-                    export FULL_TAG=${FULL_TAG}
-
-                    # Set AWS credentials for kubectl (if not already in the environment)
-                    export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-                    export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-
-                    # Apply resources in correct order
-                    kubectl apply -f k8s/nifi-namespace.yaml
-                    kubectl apply -f k8s/gp2-csi.yaml
-
-                    # Substitute FULL_TAG in the StatefulSet manifest and apply
-                    envsubst < k8s/nifi-deployment.yaml | kubectl apply -n nifi -f -
-
-                    # Deploy the Service
-                    kubectl apply -f k8s/nifi-service.yaml -n nifi
-                '''
-            }
+            kubectl apply -f k8s/nifi-namespace.yaml
+            kubectl apply -f k8s/gp2-csi.yaml
+            envsubst < k8s/nifi-deployment.yaml | kubectl apply -n nifi -f -
+            kubectl rollout status statefulset/nifi -n nifi --timeout=5m
+            kubectl apply -f k8s/nifi-service.yaml -n nifi
+          '''
         }
+      }
     }
 
-
-
-
     stage('Expose Endpoints') {
-        steps {
-            withCredentials([usernamePassword(
-            credentialsId: env.AWS_CREDS,
-            usernameVariable: 'AWS_ACCESS_KEY_ID',
-            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-            )]) {
-            script {
-                def ec2Ip = sh(
-                script: 'terraform -chdir=terraform output -raw nifi_public_ip',
-                returnStdout: true
-                ).trim()
-                def eksHost = sh(
-                script: "kubectl -n nifi get svc nifi -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'",
-                returnStdout: true
-                ).trim()
-                echo "NiFi on EC2 → http://${ec2Ip}:8080/nifi"
-                echo "NiFi on EKS → http://${eksHost}:8080/nifi"
-            }
-            }
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: env.AWS_CREDS,
+          usernameVariable: 'AWS_ACCESS_KEY_ID',
+          passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+        )]) {
+          script {
+            def ec2Ip = sh(
+              script: 'terraform -chdir=terraform output -raw nifi_public_ip',
+              returnStdout: true
+            ).trim()
+
+            def eksHost = sh(
+              script: "kubectl -n nifi get svc nifi -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'",
+              returnStdout: true
+            ).trim()
+
+            echo "NiFi on EC2 → http://${ec2Ip}:8080/nifi"
+            echo "NiFi on EKS → http://${eksHost}:8080/nifi"
+          }
         }
+      }
     }
 
   }
