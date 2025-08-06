@@ -22,7 +22,7 @@ FROM eclipse-temurin:17-jre-jammy
 # create unprivileged user & group
 RUN groupadd -r nifi && useradd -r -g nifi -d /opt/nifi -s /bin/false nifi
 
-# copy only the exploded NiFi tree
+# copy only the exploded NiFi tree (including whatever you baked into /opt/nifi/conf/nifi.properties)
 COPY --from=builder /opt/nifi /opt/nifi
 
 # strip out docs, Windows scripts, examples, unused NARs, etc.

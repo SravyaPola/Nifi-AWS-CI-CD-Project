@@ -115,19 +115,25 @@ pipeline {
       }
     }
 
-    stage('Configure kubectl for EKS') {
-      steps {
-        withCredentials([usernamePassword(
-          credentialsId: env.AWS_CREDS,
-          usernameVariable: 'AWS_ACCESS_KEY_ID',
-          passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-        )]) {
-          sh '''
-            aws eks --region ${AWS_REGION} \
-              update-kubeconfig --name $(terraform -chdir=terraform output -raw eks_cluster_name)
-          '''
+    stage('Configure kubectl & Tag Subnets') {
+        steps {
+            withCredentials([usernamePassword(
+            credentialsId: env.AWS_CREDS,
+            usernameVariable: 'AWS_ACCESS_KEY_ID',
+            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+            )]) {
+            sh '''
+                aws eks --region ${AWS_REGION} \
+                update-kubeconfig \
+                --name $(terraform -chdir=terraform output -raw eks_cluster_name)
+
+                PUB_SUBNET_IDS=$(terraform -chdir=terraform output -raw subnet_ids)
+                aws ec2 create-tags \
+                --resources ${PUB_SUBNET_IDS//,/ } \
+                --tags Key=kubernetes.io/role/elb,Value=1
+            '''
+            }
         }
-      }
     }
 
     stage('Deploy NiFi to EKS') {
