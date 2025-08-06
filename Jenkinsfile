@@ -128,8 +128,9 @@ pipeline {
                 --name $(terraform -chdir=terraform output -raw eks_cluster_name)
 
                 PUB_SUBNET_IDS=$(terraform -chdir=terraform output -raw subnet_ids)
+                PUB_SUBNET_IDS_SPACE=$(echo "$PUB_SUBNET_IDS" | tr ',' ' ')
                 aws ec2 create-tags \
-                --resources ${PUB_SUBNET_IDS//,/ } \
+                --resources $PUB_SUBNET_IDS_SPACE \
                 --tags Key=kubernetes.io/role/elb,Value=1
             '''
             }
