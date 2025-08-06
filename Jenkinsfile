@@ -135,24 +135,24 @@ pipeline {
     }
 
     stage('Install EBS CSI Driver') {
-      steps {
-        withCredentials([usernamePassword(
-          credentialsId: env.AWS_CREDS,
-          usernameVariable: 'AWS_ACCESS_KEY_ID',
-          passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-        )]) {
-          sh """
-            export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-            export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+        steps {
+            withCredentials([usernamePassword(
+            credentialsId: env.AWS_CREDS,
+            usernameVariable: 'AWS_ACCESS_KEY_ID',
+            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+            )]) {
+            sh """
+                export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+                export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
 
-            aws eks --region ${AWS_REGION} update-kubeconfig --name ${EKS_CLUSTER_NAME}
+                aws eks --region ${AWS_REGION} update-kubeconfig --name ${EKS_CLUSTER_NAME}
 
-            kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=release-1.26"
+                kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=release-1.26"
 
-            kubectl rollout status daemonset/aws-ebs-csi-driver -n kube-system --timeout=3m
-          """
+                kubectl rollout status daemonset/ebs-csi-node -n kube-system --timeout=3m
+            """
+            }
         }
-      }
     }
 
     stage('Deploy NiFi') {
