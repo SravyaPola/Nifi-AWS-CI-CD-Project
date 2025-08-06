@@ -138,11 +138,25 @@ pipeline {
     }
     stage('Install EBS CSI Driver') {
         steps {
-            sh '''
-              kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=release-1.26"
-            '''
+            withCredentials([usernamePassword(
+                credentialsId: env.AWS_CREDS,
+                usernameVariable: 'AWS_ACCESS_KEY_ID',
+                passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+            )]) {
+                sh '''
+                    export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+                    export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+
+                    aws eks --region ${AWS_REGION} \
+                    update-kubeconfig \
+                    --name $(terraform -chdir=terraform output -raw eks_cluster_name)
+
+                    kubectl apply -k "github.com/kubernetes-sigs/aws-ebs-csi-driver/deploy/kubernetes/overlays/stable/?ref=release-1.26"
+                '''
+            }
         }
     }
+
 
     stage('Deploy NiFi to EKS') {
         steps {
