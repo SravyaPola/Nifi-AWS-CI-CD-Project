@@ -18,7 +18,7 @@ output "eks_cluster_ca_data" {
 
 output "subnet_ids" {
   description = "Subnet IDs used by EKS"
-  value       = data.aws_subnets.default.ids
+  value       = join(",", data.aws_subnets.default.ids)
 }
 
 output "vpc_id" {
