@@ -145,14 +145,22 @@ pipeline {
             passwordVariable: 'AWS_SECRET_ACCESS_KEY'
             )]) {
             sh '''
-                kubectl apply -f k8s/nifi-namespace.yaml
                 export FULL_TAG=${FULL_TAG}
-                envsubst < k8s/nifi-deployment.yaml | kubectl apply -n nifi -f -
+
+                # Create the namespace (idempotent)
+                kubectl apply -f k8s/nifi-namespace.yaml
+
+                # Substitute only the $FULL_TAG placeholder, then apply
+                envsubst '${FULL_TAG}' < k8s/nifi-deployment.yaml \
+                | kubectl apply -n nifi -f -
+
+                # Finally, create/update the Service
                 kubectl apply -n nifi -f k8s/nifi-service.yaml
             '''
             }
         }
     }
+
 
     stage('Expose Endpoints') {
         steps {
