@@ -140,26 +140,30 @@ pipeline {
     stage('Deploy NiFi to EKS') {
         steps {
             withCredentials([usernamePassword(
-            credentialsId: env.AWS_CREDS,
-            usernameVariable: 'AWS_ACCESS_KEY_ID',
-            passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                credentialsId: env.AWS_CREDS,
+                usernameVariable: 'AWS_ACCESS_KEY_ID',
+                passwordVariable: 'AWS_SECRET_ACCESS_KEY'
             )]) {
-            sh '''
-                export FULL_TAG=${FULL_TAG}
+                sh '''
+                    export FULL_TAG=${FULL_TAG}
 
-                # Create the namespace (idempotent)
-                kubectl apply -f k8s/nifi-namespace.yaml
+                    # Create the StorageClass first (idempotent)
+                    kubectl apply -f k8s/gp2-csi.yaml
 
-                # Substitute only the $FULL_TAG placeholder, then apply
-                envsubst '${FULL_TAG}' < k8s/nifi-deployment.yaml \
-                | kubectl apply -n nifi -f -
+                    # Create the namespace (idempotent)
+                    kubectl apply -f k8s/nifi-namespace.yaml
 
-                # Finally, create/update the Service
-                kubectl apply -n nifi -f k8s/nifi-service.yaml
-            '''
+                    # Substitute only the $FULL_TAG placeholder, then apply
+                    envsubst '${FULL_TAG}' < k8s/nifi-deployment.yaml \
+                    | kubectl apply -n nifi -f -
+
+                    # Finally, create/update the Service
+                    kubectl apply -n nifi -f k8s/nifi-service.yaml
+                '''
             }
         }
     }
+
 
 
     stage('Expose Endpoints') {
