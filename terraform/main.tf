@@ -88,6 +88,11 @@ resource "aws_iam_role_policy_attachment" "eks_node_attach" {
   policy_arn = each.key
 }
 
+resource "aws_iam_role_policy_attachment" "eks_node_ebs_csi_attach" {
+  role       = aws_iam_role.eks_node_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEBSCSIDriverPolicy"
+}
+
 resource "aws_eks_cluster" "eks" {
   name     = var.cluster_name
   version  = var.cluster_version
