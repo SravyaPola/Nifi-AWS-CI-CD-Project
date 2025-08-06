@@ -21,18 +21,27 @@ spec:
             - containerPort: 8080
               name: http
           env:
+            - name: NIFI_WEB_HTTP_HOST
+              value: "0.0.0.0"
             - name: NIFI_WEB_HTTP_PORT
               value: "8080"
+            - name: NIFI_WEB_HTTP_NETWORK_INTERFACE_DEFAULT
+              value: ""
+            - name: NIFI_REMOTE_INPUT_HOST
+              value: ""
+            - name: NIFI_REMOTE_INPUT_SECURE
+              value: "false"
+            - name: NIFI_REMOTE_INPUT_SOCKET_PORT
+              value: ""
+            - name: NIFI_REMOTE_INPUT_HTTP_ENABLED
+              value: "true"
+            - name: NIFI_REMOTE_INPUT_HTTP_TRANSACTION_TTL
+              value: "30 sec"
+            - name: NIFI_REMOTE_CONTENTS_CACHE_EXPIRATION
+              value: "30 secs"
           volumeMounts:
             - name: data
               mountPath: /opt/nifi/data     
-            - name: nifi-properties
-              mountPath: /opt/nifi/conf/nifi.properties
-              subPath: nifi.properties
-      volumes:
-        - name: nifi-properties
-          configMap:
-            name: nifi-properties
   volumeClaimTemplates:
     - metadata:
         name: data

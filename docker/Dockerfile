@@ -47,4 +47,4 @@ ENV NIFI_HOME=/opt/nifi \
 
 EXPOSE 8080
 
-ENTRYPOINT ["nifi.sh", "run"]
+ENTRYPOINT ["/opt/nifi/bin/nifi.sh", "run"]

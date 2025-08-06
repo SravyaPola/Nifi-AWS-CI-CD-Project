@@ -176,7 +176,6 @@ pipeline {
 
                     # Apply resources in correct order
                     kubectl apply -f k8s/nifi-namespace.yaml
-                    kubectl apply -f k8s/nifi-properties-configmap.yaml
                     kubectl apply -f k8s/gp2-csi.yaml
 
                     # Substitute FULL_TAG in the StatefulSet manifest and apply
