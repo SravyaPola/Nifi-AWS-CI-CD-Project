@@ -26,19 +26,17 @@ RUN groupadd -r nifi && useradd -r -g nifi -d /opt/nifi -s /bin/false nifi
 COPY --from=builder /opt/nifi /opt/nifi
 
 # strip out docs, Windows scripts, examples, unused NARs, etc.
-RUN rm -rf \
-     /opt/nifi/docs \
-     /opt/nifi/README* \
-     /opt/nifi/bin/*.bat \
-     /opt/nifi/licenses \
-     /opt/nifi/conf/templates \
-     /opt/nifi/lib/logback* \
-     /opt/nifi/lib/kafka-client* \
-     /opt/nifi/lib/mysql-connector*
-     
 RUN chmod +x /opt/nifi/bin/nifi.sh \
- && chmod -R +x /opt/nifi/bin/ \
- && chown -R nifi:nifi /opt/nifi
+    && chmod -R +x /opt/nifi/bin/ \
+    && chown -R nifi:nifi /opt/nifi \
+    && rm -rf /opt/nifi/docs \
+    && rm -rf /opt/nifi/README* \
+    && rm -rf /opt/nifi/bin/*.bat \
+    && rm -rf /opt/nifi/licenses \
+    && rm -rf /opt/nifi/conf/templates \
+    && rm -rf /opt/nifi/lib/logback* \
+    && rm -rf /opt/nifi/lib/kafka-client* \
+    && rm -rf /opt/nifi/lib/mysql-connector*
 
 USER nifi
 WORKDIR /opt/nifi
