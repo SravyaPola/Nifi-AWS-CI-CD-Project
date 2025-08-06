@@ -30,6 +30,7 @@ spec:
     - metadata:
         name: data
       spec:
+        storageClassName: gp2-csi
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:
