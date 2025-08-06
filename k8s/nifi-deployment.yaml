@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: nifi
-          image: ${FULL_TAG}
+          image: ${FULL_TAG}          
           ports:
             - containerPort: 8080
               name: http
@@ -25,7 +25,14 @@ spec:
               value: "8080"
           volumeMounts:
             - name: data
-              mountPath: /opt/nifi/nifi-current/data
+              mountPath: /opt/nifi/data     
+            - name: nifi-properties
+              mountPath: /opt/nifi/conf/nifi.properties
+              subPath: nifi.properties
+      volumes:
+        - name: nifi-properties
+          configMap:
+            name: nifi-properties
   volumeClaimTemplates:
     - metadata:
         name: data

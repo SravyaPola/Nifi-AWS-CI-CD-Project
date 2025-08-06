@@ -152,24 +152,29 @@ pipeline {
                 passwordVariable: 'AWS_SECRET_ACCESS_KEY'
             )]) {
                 sh '''
+                    set -e
+
                     export FULL_TAG=${FULL_TAG}
 
-                    # Create the StorageClass first (idempotent)
+                    # Set AWS credentials for kubectl (if not already in the environment)
+                    export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+                    export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+
+                    # Apply resources in correct order
+                    kubectl apply -f k8s/nifi-namespace.yaml
+                    kubectl apply -f k8s/nifi-properties-configmap.yaml
                     kubectl apply -f k8s/gp2-csi.yaml
 
-                    # Create the namespace (idempotent)
-                    kubectl apply -f k8s/nifi-namespace.yaml
+                    # Substitute FULL_TAG in the StatefulSet manifest and apply
+                    envsubst < k8s/nifi-deployment.yaml | kubectl apply -n nifi -f -
 
-                    # Substitute only the $FULL_TAG placeholder, then apply
-                    envsubst '${FULL_TAG}' < k8s/nifi-deployment.yaml \
-                    | kubectl apply -n nifi -f -
-
-                    # Finally, create/update the Service
-                    kubectl apply -n nifi -f k8s/nifi-service.yaml
+                    # Deploy the Service
+                    kubectl apply -f k8s/nifi-service.yaml -n nifi
                 '''
             }
         }
     }
+
 
 
 
