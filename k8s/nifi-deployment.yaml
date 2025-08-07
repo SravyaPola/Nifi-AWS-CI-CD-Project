@@ -14,40 +14,56 @@ spec:
       labels:
         app: nifi
     spec:
+      volumes:
+        - name: nifi-conf
+          emptyDir: {}
+
+      initContainers:
+        - name: init-nifi-conf
+          image: ${FULL_TAG}
+          command:
+            - sh
+            - -c
+            - |
+              cp /opt/nifi/conf/nifi.properties /config/nifi.properties
+              sed -i \
+                -e 's@^#\?nifi.web.http.host=.*@nifi.web.http.host=0.0.0.0@' \
+                -e 's@^#\?nifi.web.http.port=.*@nifi.web.http.port=8080@' \
+                -e 's@^#\?nifi.web.http.network.interface.default=.*@nifi.web.http.network.interface.default=@' \
+                -e 's@^nifi.web.https.host=.*@# &@' \
+                -e 's@^nifi.web.https.port=.*@# &@' \
+                -e 's@^nifi.security\..*@# &@' \
+                -e 's@^#\?nifi.remote.input.host=.*@nifi.remote.input.host=@' \
+                -e 's@^#\?nifi.remote.input.secure=.*@nifi.remote.input.secure=false@' \
+                -e 's@^#\?nifi.remote.input.socket.port=.*@nifi.remote.input.socket.port=@' \
+                -e 's@^#\?nifi.remote.input.http.enabled=.*@nifi.remote.input.http.enabled=true@' \
+                -e 's@^#\?nifi.remote.input.http.transaction.ttl=.*@nifi.remote.input.http.transaction.ttl=30 sec@' \
+                -e 's@^#\?nifi.remote.contents.cache.expiration=.*@nifi.remote.contents.cache.expiration=30 secs@' \
+                /config/nifi.properties
+          volumeMounts:
+            - name: nifi-conf
+              mountPath: /config
+
       containers:
         - name: nifi
-          image: ${FULL_TAG}          
+          image: ${FULL_TAG}
           ports:
-            - containerPort: 8080
-              name: http
-          env:
-            - name: NIFI_WEB_HTTP_HOST
-              value: "0.0.0.0"
-            - name: NIFI_WEB_HTTP_PORT
-              value: "8080"
-            - name: NIFI_WEB_HTTP_NETWORK_INTERFACE_DEFAULT
-              value: ""
-            - name: NIFI_REMOTE_INPUT_HOST
-              value: ""
-            - name: NIFI_REMOTE_INPUT_SECURE
-              value: "false"
-            - name: NIFI_REMOTE_INPUT_SOCKET_PORT
-              value: ""
-            - name: NIFI_REMOTE_INPUT_HTTP_ENABLED
-              value: "true"
-            - name: NIFI_REMOTE_INPUT_HTTP_TRANSACTION_TTL
-              value: "30 sec"
-            - name: NIFI_REMOTE_CONTENTS_CACHE_EXPIRATION
-              value: "30 secs"
+            - name: http
+              containerPort: 8080
           volumeMounts:
+            - name: nifi-conf
+              mountPath: /opt/nifi/conf/nifi.properties
+              subPath: nifi.properties
             - name: data
-              mountPath: /opt/nifi/data     
+              mountPath: /opt/nifi/data
+
   volumeClaimTemplates:
     - metadata:
         name: data
       spec:
         storageClassName: gp2-csi
-        accessModes: ["ReadWriteOnce"]
+        accessModes:
+          - ReadWriteOnce
         resources:
           requests:
             storage: 10Gi
